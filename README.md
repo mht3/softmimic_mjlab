@@ -1,10 +1,10 @@
-# Unitree RL Mjlab
+# Humanoid Visitation Critic
 
 
 ## ✳️ Overview
-Unitree RL Mjlab is a reinforcement learning project built upon the
+Adaptation of the [Unitree RL Mjlab Repository](https://github.com/unitreerobotics/unitree_rl_mjlab.git) for visitation critics. This is a reinforcement learning project built upon the
 [mjlab](https://github.com/mujocolab/mjlab.git), using MuJoCo as its 
-physics simulation backend, currently supporting Unitree Go2, A2, As2, G1, R1, H1_2 and H2.
+physics simulation backend, currently supporting Unitree G1 23dof.
 
 Mjlab combines [Isaac Lab](https://github.com/isaac-sim/IsaacLab)'s proven API
 with best-in-class [MuJoCo](https://github.com/google-deepmind/mujoco_warp)
