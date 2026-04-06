@@ -43,18 +43,18 @@ The basic workflow for using reinforcement learning to achieve motion control is
 Run the following command to train a velocity tracking policy:
 
 ```bash
-python scripts/train.py Unitree-G1-Flat --env.scene.num-envs=4096
+python scripts/train.py Unitree-G1-23Dof-Flat --env.scene.num-envs=4096
 ```
 
 Multi-GPU Training: Scale to multiple GPUs using --gpu-ids:
 
 ```bash
-python scripts/train.py Unitree-G1-Flat \
+python scripts/train.py Unitree-G1-23Dof-Flat \
   --gpu-ids 0 1 \
   --env.scene.num-envs=4096
 ```
 
-- The first argument (e.g., Mjlab-Velocity-Flat-Unitree-G1) specifies the training task.
+- The first argument (e.g., Unitree-G1-23Dof-Flat) specifies the training task.
 Available velocity tracking tasks:
   - Unitree-Go2-Flat
   - Unitree-G1-Flat
@@ -120,7 +120,7 @@ To visualize policy behavior in MuJoCo:
 
 Velocity tracking:
 ```bash
-python scripts/play.py Unitree-G1-Flat --checkpoint_file=logs/rsl_rl/g1_velocity/2026-xx-xx_xx-xx-xx/model_xx.pt
+python scripts/play.py Unitree-G1-23Dof-Flat --checkpoint_file=logs/rsl_rl/g1_23dof_velocity/2026-xx-xx_xx-xx-xx/model_xx.pt
 ```
 
 Motion imitation:
@@ -222,12 +222,8 @@ cd deploy/robots/g1/build
 | <img src="doc/gif/go2-velocity-real.gif" width="300"/> | <img src="doc/gif/g1-velocity-real.gif" width="300"/> | <img src="doc/gif/h1_2-velocity-real.gif" width="300"/> | <img src="doc/gif/g1-mimic-real.gif" width="300"/> |
 
 
-## 🎉  Acknowledgements
+## Acknowledgements
 
 This project would not be possible without the contributions of the following repositories:
-
 - [mjlab](https://github.com/mujocolab/mjlab.git): training and execution framework
-- [whole_body_tracking](https://github.com/HybridRobotics/whole_body_tracking.git): versatile humanoid motion tracking framework
-- [rsl_rl](https://github.com/leggedrobotics/rsl_rl.git): reinforcement learning algorithm implementation
-- [mujoco_warp](https://github.com/google-deepmind/mujoco_warp.git): GPU-accelerated rendering and simulation interface
-- [mujoco](https://github.com/google-deepmind/mujoco.git): high-fidelity rigid-body physics engine
+- [Unitree RL Mjlab Repository](https://github.com/unitreerobotics/unitree_rl_mjlab.git): adaptation for Unitree robots

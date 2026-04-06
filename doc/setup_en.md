@@ -58,17 +58,14 @@ git clone https://github.com/unitreerobotics/unitree_rl_mjlab.git
 
 ### 2.2 Install Dependencies
 
-```bash
-sudo apt install -y libyaml-cpp-dev libboost-all-dev libeigen3-dev libspdlog-dev libfmt-dev
-```
-
-All other dependencies are specified in the setup.py file.
-Navigate to the project root directory and install them with:
+Navigate to the project root directory and run the setup script:
 
 ```bash
-cd unitree_rl_mjlab
-pip install -e .
+cd humanoid_visitation_critic
+bash setup.sh
 ```
+
+This installs system dependencies, the local RL algorithms (`algorithms/rsl_rl`) in editable mode so any changes take effect immediately, and the main package.
 
 ## Summary
 
