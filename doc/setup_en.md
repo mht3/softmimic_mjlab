@@ -53,7 +53,7 @@ conda activate unitree_rl_mjlab
 Clone the repository using Git:
 
 ```bash
-git clone https://github.com/unitreerobotics/unitree_rl_mjlab.git
+git clone git@github.com:mht3/humanoid_visitation_critic.git
 ```
 
 ### 2.2 Install Dependencies

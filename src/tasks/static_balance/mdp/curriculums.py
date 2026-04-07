@@ -83,13 +83,41 @@ def commands_vel(
       if "ang_vel_z" in stage and stage["ang_vel_z"] is not None:
         cfg.ranges.ang_vel_z = stage["ang_vel_z"]
   return {
-    "lin_vel_x_min": torch.tensor(cfg.ranges.lin_vel_x[0]),
-    "lin_vel_x_max": torch.tensor(cfg.ranges.lin_vel_x[1]),
-    "lin_vel_y_min": torch.tensor(cfg.ranges.lin_vel_y[0]),
-    "lin_vel_y_max": torch.tensor(cfg.ranges.lin_vel_y[1]),
-    "ang_vel_z_min": torch.tensor(cfg.ranges.ang_vel_z[0]),
-    "ang_vel_z_max": torch.tensor(cfg.ranges.ang_vel_z[1]),
+    # "lin_vel_x_min": torch.tensor(cfg.ranges.lin_vel_x[0]),
+    # "lin_vel_x_max": torch.tensor(cfg.ranges.lin_vel_x[1]),
+    # "lin_vel_y_min": torch.tensor(cfg.ranges.lin_vel_y[0]),
+    # "lin_vel_y_max": torch.tensor(cfg.ranges.lin_vel_y[1]),
+    # "ang_vel_z_min": torch.tensor(cfg.ranges.ang_vel_z[0]),
+    # "ang_vel_z_max": torch.tensor(cfg.ranges.ang_vel_z[1]),
   }
+
+
+class PushVelocityStage(TypedDict):
+  step: int
+  velocity_range: dict[str, tuple[float, float]]
+
+
+def push_velocity_curriculum(
+  env: ManagerBasedRlEnv,
+  env_ids: torch.Tensor,
+  velocity_stages: list[PushVelocityStage],
+) -> dict[str, torch.Tensor]:
+  """Increase push_robot velocity ranges at configured training step thresholds."""
+  del env_ids  # Unused.
+  event_term_cfg = env.event_manager.get_term_cfg("push_robot")
+  for stage in velocity_stages:
+    if env.common_step_counter > stage["step"]:
+      event_term_cfg.params["velocity_range"].update(stage["velocity_range"])
+  vel_range = event_term_cfg.params["velocity_range"]
+  out: dict[str, torch.Tensor] = {}
+  for axis, bounds in vel_range.items():
+    hi = float(bounds[1])
+    if axis in ("x", "y", "z"):
+      prefix = f"push_vel_{axis}"
+    else:
+      prefix = f"push_{axis}"
+    out[f"{prefix}_max"] = torch.tensor(hi)
+  return out
 
 
 def reward_weight(

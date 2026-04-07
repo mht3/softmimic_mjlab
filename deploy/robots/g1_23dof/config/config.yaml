@@ -7,6 +7,9 @@ FSM:
     Velocity:
       id: 3
       type: RLBase
+    Static_Balance:
+      id: 4
+      type: RLBase
   Passive:
     transitions: 
       FixStand: LT + up.on_pressed
@@ -28,6 +31,7 @@ FSM:
     transitions: 
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
+      Static_Balance: RT + B.on_pressed
     kp: [
       100., 100., 100., 150., 40., 40.,
       100., 100., 100., 150., 40., 40.,
@@ -55,4 +59,10 @@ FSM:
   Velocity:
     transitions: 
       Passive: LT + B.on_pressed
+      Static_Balance: RT + B.on_pressed
     policy_dir: config/policy/velocity
+  Static_Balance:
+    transitions: 
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+    policy_dir: config/policy/static_balance/v0

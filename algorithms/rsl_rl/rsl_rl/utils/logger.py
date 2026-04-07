@@ -103,10 +103,13 @@ class Logger:
     ) -> None:
         """Add metrics from the environment step to the buffers."""
         if self.writer is not None:
+            merged: dict = {}
             if "episode" in extras:
-                self.ep_extras.append(extras["episode"])
-            elif "log" in extras:
-                self.ep_extras.append(extras["log"])
+                merged.update(extras["episode"])
+            if "log" in extras:
+                merged.update(extras["log"])
+            if merged:
+                self.ep_extras.append(merged)
 
             # Update rewards and episode length
             if intrinsic_rewards is not None:

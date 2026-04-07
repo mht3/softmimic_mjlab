@@ -7,6 +7,8 @@ import mujoco
 from src import SRC_PATH
 from mjlab.actuator import BuiltinPositionActuatorCfg
 from mjlab.entity import EntityArticulationInfoCfg, EntityCfg
+
+from src.assets.robots.deploy_entity_cfg import DeployEntityCfg
 from mjlab.utils.actuator import (
   ElectricActuator,
   reflected_inertia_from_two_stage_planetary,
@@ -270,17 +272,39 @@ G1_ARTICULATION = EntityArticulationInfoCfg(
 )
 
 
+G1_JOINT_IDS_MAP: list[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]
+
+# Hardware PD gains (action-space order, not sim actuator values).
+G1_HARDWARE_STIFFNESS: list[float] = [
+  40.2, 99.1, 40.2, 99.1, 28.5, 28.5,
+  40.2, 99.1, 40.2, 99.1, 28.5, 28.5,
+  40.2, 28.5, 28.5,
+  14.3, 14.3, 14.3, 14.3, 14.3, 16.8, 16.8,
+  14.3, 14.3, 14.3, 14.3, 14.3, 16.8, 16.8,
+]
+G1_HARDWARE_DAMPING: list[float] = [
+  2.6, 6.3, 2.6, 6.3, 1.8, 1.8,
+  2.6, 6.3, 2.6, 6.3, 1.8, 1.8,
+  2.6, 1.8, 1.8,
+  0.9, 0.9, 0.9, 0.9, 0.9, 1.1, 1.1,
+  0.9, 0.9, 0.9, 0.9, 0.9, 1.1, 1.1,
+]
+
+
 def get_g1_robot_cfg() -> EntityCfg:
   """Get a fresh G1 robot configuration instance.
 
   Returns a new EntityCfg instance each time to avoid mutation issues when
   the config is shared across multiple places.
   """
-  return EntityCfg(
+  return DeployEntityCfg(
     init_state=HOME_KEYFRAME,
     collisions=(FULL_COLLISION,),
     spec_fn=get_spec,
     articulation=G1_ARTICULATION,
+    joint_ids_map=G1_JOINT_IDS_MAP,
+    hardware_stiffness=G1_HARDWARE_STIFFNESS,
+    hardware_damping=G1_HARDWARE_DAMPING,
   )
 
 

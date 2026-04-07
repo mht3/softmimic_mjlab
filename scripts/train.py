@@ -2,6 +2,8 @@
 
 import logging
 import os
+import shlex
+import shutil
 import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -18,6 +20,34 @@ from mjlab.utils.gpu import select_gpus
 from mjlab.utils.os import dump_yaml, get_checkpoint_path
 from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
+from src.utils.deploy_export import export_deploy_cfg
+
+
+def _write_params_training_scripts(log_dir: Path) -> None:
+  """Save how training was started under log_dir/params/ for reproducibility."""
+  params_dir = log_dir / "params"
+  params_dir.mkdir(parents=True, exist_ok=True)
+
+  repro = params_dir / "reproduce_train.sh"
+  repro.write_text(
+    "#!/usr/bin/env bash\n"
+    "# Auto-saved: re-run from the same working directory you used to start training.\n"
+    "set -euo pipefail\n"
+    f"exec {shlex.join(sys.argv)}\n",
+    encoding="utf-8",
+  )
+  repro.chmod(repro.stat().st_mode | 0o111)
+
+  launch_src = os.environ.get("TRAIN_LAUNCH_SCRIPT", "").strip()
+  if launch_src:
+    src_path = Path(launch_src).expanduser()
+    if src_path.is_file():
+      shutil.copy2(src_path, params_dir / "launch_train.sh")
+    else:
+      (params_dir / "launch_train_script_missing.txt").write_text(
+        f"TRAIN_LAUNCH_SCRIPT was set but file not found:\n  {src_path}\n",
+        encoding="utf-8",
+      )
 
 
 @dataclass(frozen=True)
@@ -92,6 +122,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
   env = ManagerBasedRlEnv(
     cfg=cfg.env, device=device, render_mode="rgb_array" if cfg.video else None
   )
+  base_env = env
 
   log_root_path = log_dir.parent  # Go up from specific run dir to experiment dir.
 
@@ -134,6 +165,8 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
   if rank == 0:
     dump_yaml(log_dir / "params" / "env.yaml", env_cfg)
     dump_yaml(log_dir / "params" / "agent.yaml", agent_cfg)
+    _write_params_training_scripts(log_dir)
+    export_deploy_cfg(base_env, log_dir)
 
   runner.learn(
     num_learning_iterations=cfg.agent.max_iterations, init_at_random_ep_len=True
