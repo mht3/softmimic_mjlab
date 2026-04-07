@@ -125,7 +125,7 @@ To visualize policy behavior in MuJoCo:
 
 Velocity tracking:
 ```bash
-python scripts/play.py Unitree-G1-23Dof-Flat --checkpoint_file=logs/rsl_rl/g1_23dof_velocity/2026-xx-xx_xx-xx-xx/model_xx.pt
+python scripts/play.py Unitree-G1-23Dof-Flat --viewer viser --checkpoint_file=logs/rsl_rl/g1_23dof_velocity/2026-xx-xx_xx-xx-xx/model_xx.pt
 ```
 
 Motion imitation:

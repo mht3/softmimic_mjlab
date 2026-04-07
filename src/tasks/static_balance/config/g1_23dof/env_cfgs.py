@@ -9,6 +9,8 @@ from mjlab.sensor import ContactMatch, ContactSensorCfg
 from src.assets.robots import G1_23DOF_ACTION_SCALE, get_g1_23dof_robot_cfg
 from src.tasks.static_balance.balance_env_cfg import make_balance_env_cfg
 import src.tasks.static_balance.mdp as mdp
+from src.tasks.static_balance.mdp.push_control_command import PushControlCommandCfg
+from src.tasks.static_balance.mdp.force_control_command import ForceControlCommandCfg
 
 
 def unitree_g1_23dof_balance_push_curriculum_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
@@ -80,11 +82,9 @@ def unitree_g1_23dof_balance_push_curriculum_env_cfg(play: bool = False) -> Mana
     cfg.episode_length_s = int(1e9)
     cfg.observations["actor"].enable_corruption = False
     cfg.events.pop("push_robot", None)
-    from src.tasks.static_balance.mdp.push_control_command import PushControlCommandCfg
     cfg.commands["push_control"] = PushControlCommandCfg(
       entity_name="robot", resampling_time_range=(1.0e9, 1.0e9)
     )
-    from src.tasks.static_balance.mdp.force_control_command import ForceControlCommandCfg
     cfg.commands["force_control"] = ForceControlCommandCfg(
       entity_name="robot",
       resampling_time_range=(1.0e9, 1.0e9),

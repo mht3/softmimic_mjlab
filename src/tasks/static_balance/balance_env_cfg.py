@@ -137,12 +137,12 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
       interval_range_s=(2.0, 5.0),
       params={
         "velocity_range": {
-          "x": (-1.5, 1.5),
-          "y": (-1.5, 1.5),
+          "x": (-1.25, 1.25),
+          "y": (-1.25, 1.25),
           "z": (-0.5, 0.5),
-          "roll": (-1.57, 1.57),
-          "pitch": (-1.57, 1.57),
-          "yaw": (-1.57, 1.57),
+          "roll": (-0.52, 0.52),
+          "pitch": (-0.52, 0.52),
+          "yaw": (-0.78, 0.78),
         },
       },
     ),
