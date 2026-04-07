@@ -10,6 +10,11 @@ FSM:
     Static_Balance:
       id: 4
       type: RLBase
+
+    Mimic_Dance1_subject2:
+      id: 5
+      type: Mimic
+
   Passive:
     transitions: 
       FixStand: LT + up.on_pressed
@@ -60,9 +65,20 @@ FSM:
     transitions: 
       Passive: LT + B.on_pressed
       Static_Balance: RT + B.on_pressed
+      Mimic_Dance1_subject2: RB + A.on_pressed
     policy_dir: config/policy/velocity
+
+  Mimic_Dance1_subject2:
+    transitions:
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+
+    motion_file: config/policy/mimic/dance1_subject2/params/dance1_subject2.npz
+    policy_dir: config/policy/mimic/dance1_subject2/
+    time_start: 0.0
+    time_end: 500.0
   Static_Balance:
-    transitions: 
+    transitions:
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
     policy_dir: config/policy/static_balance/v0

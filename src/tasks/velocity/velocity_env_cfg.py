@@ -167,7 +167,6 @@ def make_velocity_env_cfg() -> ManagerBasedRlEnvCfg:
       entity_name="robot",
       resampling_time_range=(3.0, 8.0),
       rel_standing_envs=0.05,
-      rel_heading_envs=0.25,
       heading_command=True,
       heading_control_stiffness=0.5,
       debug_vis=True,
@@ -210,7 +209,7 @@ def make_velocity_env_cfg() -> ManagerBasedRlEnvCfg:
     "push_robot": EventTermCfg(
       func=mdp.push_by_setting_velocity,
       mode="interval",
-      interval_range_s=(1.0, 3.0),
+      interval_range_s=(5.0, 6.0),
       params={
         "velocity_range": {
           "x": (-0.5, 0.5),
@@ -228,7 +227,7 @@ def make_velocity_env_cfg() -> ManagerBasedRlEnvCfg:
       params={
         "asset_cfg": SceneEntityCfg("robot", geom_names=()),  # Set per-robot.
         "operation": "abs",
-        "ranges": (0.3, 1.2),
+        "ranges": (0.3, 1.6),
         "shared_random": True,  # All foot geoms share the same friction.
       },
     ),
@@ -247,9 +246,9 @@ def make_velocity_env_cfg() -> ManagerBasedRlEnvCfg:
         "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set per-robot.
         "operation": "add",
         "ranges": {
-          0: (-0.025, 0.025),
-          1: (-0.025, 0.025),
-          2: (-0.03, 0.03),
+          0: (-0.05, 0.05),
+          1: (-0.05, 0.05),
+          2: (-0.05, 0.05),
         },
       },
     ),

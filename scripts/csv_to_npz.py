@@ -3,13 +3,15 @@ from typing import Any
 import numpy as np
 import torch
 import tyro
+import os
 from tqdm import tqdm
 
 import mjlab
 from mjlab.entity import Entity
 from mjlab.scene import Scene
 from mjlab.sim.sim import Simulation, SimulationCfg
-from mjlab.tasks.tracking.config.g1.env_cfgs import unitree_g1_flat_tracking_env_cfg
+from src.tasks.tracking.config.g1.env_cfgs import unitree_g1_flat_tracking_env_cfg
+from src.tasks.tracking.config.g1_23dof.env_cfgs import unitree_g1_23dof_flat_tracking_env_cfg
 from mjlab.utils.lab_api.math import (
   axis_angle_from_quat,
   quat_conjugate,
@@ -187,7 +189,7 @@ def run_sim(
   input_file,
   input_fps,
   output_fps,
-  output_name,
+  output_path,
   render,
   line_range,
   renderer: OffscreenRenderer | None = None,
@@ -304,10 +306,11 @@ def run_sim(
           "body_ang_vel_w",
         ):
           log[k] = np.stack(log[k], axis=0)
-        np.savez(f"./src/assets/motions/g1/{output_name}", **log)  # type: ignore[arg-type]
+        np.savez(output_path, **log)  # type: ignore[arg-type]
 
 
 def main(
+  robot: str,
   input_file: str,
   output_name: str,
   input_fps: float = 30.0,
@@ -329,34 +332,8 @@ def main(
   """
   sim_cfg = SimulationCfg()
   sim_cfg.mujoco.timestep = 1.0 / output_fps
-
-  scene = Scene(unitree_g1_flat_tracking_env_cfg().scene, device=device)
-  model = scene.compile()
-
-  sim = Simulation(num_envs=1, cfg=sim_cfg, model=model, device=device)
-
-  scene.initialize(sim.mj_model, sim.model, sim.data)
-
-  renderer = None
-  if render:
-    viewer_cfg = ViewerConfig(
-      height=480,
-      width=640,
-      origin_type=ViewerConfig.OriginType.ASSET_ROOT,
-      distance=2.0,
-      elevation=-5.0,
-      azimuth=20,
-    )
-    renderer = OffscreenRenderer(
-      model=sim.mj_model,
-      cfg=viewer_cfg,
-      scene=scene,
-    )
-    renderer.initialize()
-
-  run_sim(
-    sim=sim,
-    scene=scene,
+  if robot == "g1":    # 29 Dof
+    scene = Scene(unitree_g1_flat_tracking_env_cfg().scene, device=device)
     joint_names=[
       "left_hip_pitch_joint",
       "left_hip_roll_joint",
@@ -387,11 +364,74 @@ def main(
       "right_wrist_roll_joint",
       "right_wrist_pitch_joint",
       "right_wrist_yaw_joint",
-    ],
+    ]
+    output_dir = "./src/assets/motions/g1"
+  elif robot == "g1_23dof":
+    scene = Scene(unitree_g1_23dof_flat_tracking_env_cfg().scene, device=device)
+    joint_names=[    # 23 Dof
+      "left_hip_pitch_joint",
+      "left_hip_roll_joint",
+      "left_hip_yaw_joint",
+      "left_knee_joint",
+      "left_ankle_pitch_joint",
+      "left_ankle_roll_joint",
+      "right_hip_pitch_joint",
+      "right_hip_roll_joint",
+      "right_hip_yaw_joint",
+      "right_knee_joint",
+      "right_ankle_pitch_joint",
+      "right_ankle_roll_joint",
+      "waist_yaw_joint",
+      "left_shoulder_pitch_joint",
+      "left_shoulder_roll_joint",
+      "left_shoulder_yaw_joint",
+      "left_elbow_joint",
+      "left_wrist_roll_joint",
+      "right_shoulder_pitch_joint",
+      "right_shoulder_roll_joint",
+      "right_shoulder_yaw_joint",
+      "right_elbow_joint",
+      "right_wrist_roll_joint",
+    ]
+    output_dir = "./src/assets/motions/g1_23dof"
+  else:
+    raise ValueError(f"Unsupported robot: {robot}")
+
+  model = scene.compile()
+
+  sim = Simulation(num_envs=1, cfg=sim_cfg, model=model, device=device)
+
+  scene.initialize(sim.mj_model, sim.model, sim.data)
+
+  renderer = None
+  if render:
+    viewer_cfg = ViewerConfig(
+      height=480,
+      width=640,
+      origin_type=ViewerConfig.OriginType.ASSET_ROOT,
+      distance=2.0,
+      elevation=-5.0,
+      azimuth=20,
+    )
+    renderer = OffscreenRenderer(
+      model=sim.mj_model,
+      cfg=viewer_cfg,
+      scene=scene,
+    )
+    renderer.initialize()
+  os.makedirs(output_dir, exist_ok=True)
+  if not output_name.endswith(".npz"):
+    output_name += ".npz"
+  output_path = os.path.join(output_dir, output_name)
+
+  run_sim(
+    sim=sim,
+    scene=scene,
+    joint_names=joint_names,
     input_fps=input_fps,
     input_file=input_file,
     output_fps=output_fps,
-    output_name=output_name,
+    output_path=output_path,
     render=render,
     line_range=line_range,
     renderer=renderer,

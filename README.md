@@ -82,7 +82,8 @@ python scripts/csv_to_npz.py \
 --input-file src/assets/motions/g1/dance1_subject2.csv \
 --output-name dance1_subject2.npz \
 --input-fps 30 \
---output-fps 50
+--output-fps 50 \
+--robot g1 # g1 or g1_23dof
 ```
 
 **npz files will be stored at:**：`src/motions/g1/...`
@@ -94,6 +95,10 @@ After generating the NPZ file, launch imitation training:
 ```bash
 python scripts/train.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src/assets/motions/g1/dance1_subject2.npz --env.scene.num-envs=4096
 ```
+
+Available tasks:
+  - Unitree-G1-Tracking-No-State-Estimation
+  - Unitree-G1-23Dof-Tracking-No-State-Estimation
 
 </div>
 
@@ -125,7 +130,7 @@ python scripts/play.py Unitree-G1-23Dof-Flat --checkpoint_file=logs/rsl_rl/g1_23
 
 Motion imitation:
 ```bash
-python scripts/play.py Unitree-G1-Tracking --motion_file=src/assets/motions/g1/dance1_subject2.npz --checkpoint_file=logs/rsl_rl/g1_tracking/2026-xx-xx_xx-xx-xx/model_xx.pt
+python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src/assets/motions/g1/dance1_subject2.npz --checkpoint_file=logs/rsl_rl/g1_tracking/2026-xx-xx_xx-xx-xx/model_xx.pt
 ```
 
 **Note**：

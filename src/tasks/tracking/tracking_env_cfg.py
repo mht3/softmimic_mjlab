@@ -178,7 +178,7 @@ def make_tracking_env_cfg() -> ManagerBasedRlEnvCfg:
         "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set in robot cfg.
         "operation": "add",
         "ranges": {
-          0: (-0.025, 0.025),
+          0: (-0.05, 0.05),
           1: (-0.05, 0.05),
           2: (-0.05, 0.05),
         },
