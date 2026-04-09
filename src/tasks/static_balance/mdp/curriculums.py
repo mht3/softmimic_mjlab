@@ -120,6 +120,52 @@ def push_velocity_curriculum(
   return out
 
 
+class ResetNoiseStage(TypedDict):
+  step: int
+  joint_range: float
+  lin_vel_range: float
+  z_vel_range: float
+  ang_vel_range: float
+  pos_z_range: float
+  rp_range: float
+
+
+def reset_noise_curriculum(
+  env: ManagerBasedRlEnv,
+  env_ids: torch.Tensor,
+  noise_stages: list[ResetNoiseStage],
+) -> dict[str, torch.Tensor]:
+  """Increase reset init noise ranges at configured training step thresholds.
+
+  Updates reset_base velocity_range and pose_range["z"], reset_robot_joints
+  position_range, and reset_rp_noise rp_range in sync with push curriculum.
+  """
+  del env_ids
+  active = noise_stages[0]
+  for stage in noise_stages:
+    if env.common_step_counter > stage["step"]:
+      active = stage
+  lv = active["lin_vel_range"]
+  zv = active["z_vel_range"]
+  av = active["ang_vel_range"]
+  pz = active["pos_z_range"]
+  jr = active["joint_range"]
+  rp = active["rp_range"]
+
+  base_cfg = env.event_manager.get_term_cfg("reset_base")
+  base_cfg.params["velocity_range"] = {
+    "x": (-lv, lv), "y": (-lv, lv), "z": (-zv, zv),
+    "roll": (-av, av), "pitch": (-av, av), "yaw": (-av, av),
+  }
+  base_cfg.params["pose_range"]["z"] = (-pz, pz)
+  env.event_manager.get_term_cfg("reset_robot_joints").params["position_range"] = (-jr, jr)
+  env.event_manager.get_term_cfg("reset_rp_noise").params["rp_range"] = rp
+  return {
+    "init_lin_vel_max": torch.tensor(lv),
+    "init_rp_max": torch.tensor(rp),
+  }
+
+
 def reward_weight(
   env: ManagerBasedRlEnv,
   env_ids: torch.Tensor,

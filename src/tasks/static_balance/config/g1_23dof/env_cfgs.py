@@ -94,7 +94,16 @@ def unitree_g1_23dof_balance_push_curriculum_env_cfg(play: bool = False) -> Mana
 
 
 def unitree_g1_23dof_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
-  """G1-23DOF flat balance env — no push curriculum."""
+  """G1-23DOF flat balance env — no push curriculum, constant medium-level init noise."""
   cfg = unitree_g1_23dof_balance_push_curriculum_env_cfg(play=play)
   cfg.curriculum.pop("push_velocity", None)
+  cfg.curriculum.pop("reset_noise", None)  # Fixed at medium level; no progression.
+  # Set constant medium-level init noise (matches PERTURB_LEVELS["medium"] in evaluate.py).
+  cfg.events["reset_base"].params["velocity_range"] = {
+    "x": (-1.25, 1.25), "y": (-1.25, 1.25), "z": (-0.2, 0.2),
+    "roll": (-0.78, 0.78), "pitch": (-0.78, 0.78), "yaw": (-0.78, 0.78),
+  }
+  cfg.events["reset_base"].params["pose_range"]["z"] = (-0.01, 0.01)
+  cfg.events["reset_robot_joints"].params["position_range"] = (-0.2, 0.2)
+  cfg.events["reset_rp_noise"].params["rp_range"] = 0.3
   return cfg

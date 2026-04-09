@@ -131,6 +131,11 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
         "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
       },
     ),
+    "reset_rp_noise": EventTermCfg(
+      func=mdp.reset_rp_noise,
+      mode="reset",
+      params={"rp_range": 0.0},  # Updated by reset_noise_curriculum or flat env.
+    ),
     "push_robot": EventTermCfg(
       func=mdp.push_by_setting_velocity,
       mode="interval",
@@ -139,9 +144,9 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
         "velocity_range": {
           "x": (-1.25, 1.25),
           "y": (-1.25, 1.25),
-          "z": (-0.5, 0.5),
-          "roll": (-0.52, 0.52),
-          "pitch": (-0.52, 0.52),
+          "z": (-0.2, 0.2),
+          "roll": (-0.78, 0.78),
+          "pitch": (-0.78, 0.78),
           "yaw": (-0.78, 0.78),
         },
       },
@@ -238,6 +243,11 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
     "joint_acc_l2": RewardTermCfg(func=mdp.joint_acc_l2, weight=-2.5e-7),
     "joint_pos_limits": RewardTermCfg(func=mdp.joint_pos_limits, weight=-10.0),
     "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.05),
+    "electrical_power": RewardTermCfg(
+      func=mdp.electrical_power_cost,
+      weight=-1e-4,
+      params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+    ),
   }
 
   ##
@@ -281,26 +291,45 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
         func=mdp.push_velocity_curriculum,
         params={
           "velocity_stages": [
-            # Stage 0: soft pushes for the first 5k iterations.
+            # Stage 0 (none)
             {"step": 0, "velocity_range": {
-              "x": (-0.5, 0.5), "y": (-0.5, 0.5), "z": (-0.4, 0.4),
-              "roll": (-0.52, 0.52), "pitch": (-0.52, 0.52), "yaw": (-0.78, 0.78),
+              "x": (0.0, 0.0), "y": (0.0, 0.0), "z": (0.0, 0.0),
+              "roll": (0.0, 0.0), "pitch": (0.0, 0.0), "yaw": (0.0, 0.0),
             }},
-            # Stage 1: harder pushes after iteration 5000 (step = 5000 * num_steps_per_env).
-            {"step": 2500 * 24, "velocity_range": {
-              "x": (-1.0, 1.0), "y": (-1.0, 1.0), "z": (-0.5, 0.5),
-              "roll": (-0.78, 0.78), "pitch": (-0.78, 0.78), "yaw": (-1.0, 1.0),
+            # Stage 1 (small)
+            {"step": 1000 * 24, "velocity_range": {
+              "x": (-0.5, 0.5), "y": (-0.5, 0.5), "z": (-0.2, 0.2),
+              "roll": (-0.78, 0.78), "pitch": (-0.78, 0.78), "yaw": (-0.78, 0.78),
             }},
-            # Stage 2
-            {"step": 7500 * 24, "velocity_range": {
-              "x": (-1.5, 1.5), "y": (-1.5, 1.5), "z": (-0.5, 0.5),
-              "roll": (-1.57, 1.57), "pitch": (-1.57, 1.57), "yaw": (-1.57, 1.57),
+            # Stage 2 (medium).
+            {"step": 5000 * 24, "velocity_range": {
+              "x": (-1.25, 1.25), "y": (-1.25, 1.25), "z": (-0.2, 0.2),
+              "roll": (-1.18, 1.18), "pitch": (-1.18, 1.18), "yaw": (-1.18, 1.18),
             }},
-            # Stage 3
-            {"step": 12500 * 24, "velocity_range": {
-              "x": (-2.0, 2.0), "y": (-2.0, 2.0), "z": (-0.5, 0.5),
-              "roll": (-1.57, 1.57), "pitch": (-1.57, 1.57), "yaw": (-1.57, 1.57),
+            # Stage 3 (hard)
+            {"step": 10000 * 24, "velocity_range": {
+              "x": (-2.0, 2.0), "y": (-2.0, 2.0), "z": (-0.2, 0.2),
+              "roll": (-1.18, 1.18), "pitch": (-1.18, 1.18), "yaw": (-1.18, 1.18),
             }},
+          ],
+        },
+      ),
+      "reset_noise": CurriculumTermCfg(
+        func=mdp.reset_noise_curriculum,
+        params={
+          "noise_stages": [
+            # Stage 0 (none): no init noise at the start.
+            {"step": 0, "joint_range": 0.0, "lin_vel_range": 0.0, "z_vel_range": 0.0,
+             "ang_vel_range": 0.0, "pos_z_range": 0.0, "rp_range": 0.0},
+            # Stage 1 (small)
+            {"step": 1000 * 24, "joint_range": 0.1, "lin_vel_range": 0.5, "z_vel_range": 0.2,
+             "ang_vel_range": 0.78, "pos_z_range": 0.01, "rp_range": 0.1},
+            # Stage 2 (medium)
+            {"step": 5000 * 24, "joint_range": 0.2, "lin_vel_range": 1.25, "z_vel_range": 0.2,
+             "ang_vel_range": 0.78, "pos_z_range": 0.01, "rp_range": 0.3},
+            # Stage 3 (hard)
+            {"step": 10000 * 24, "joint_range": 0.4, "lin_vel_range": 2.0, "z_vel_range": 0.2,
+             "ang_vel_range": 0.78, "pos_z_range": 0.01, "rp_range": 0.4},
           ],
         },
       ),
@@ -315,7 +344,7 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
       azimuth=90.0,
     ),
     sim=SimulationCfg(
-      njmax=300,
+      njmax=400,
       mujoco=MujocoCfg(
         timestep=0.005,
         iterations=10,
