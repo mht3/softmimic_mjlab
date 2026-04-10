@@ -9,10 +9,22 @@
 class FSMState : public BaseState
 {
 public:
-    FSMState(int state, std::string state_string) 
-    : BaseState(state, state_string) 
+    FSMState(int state, std::string state_string)
+    : BaseState(state, state_string)
     {
         spdlog::info("Initializing State_{} ...", state_string);
+
+        // Kill switch: press 'k' once to immediately enter passive mode
+        registered_checks.emplace_back(
+            std::make_pair(
+                []()->bool{
+                    return FSMState::keyboard &&
+                           FSMState::keyboard->on_pressed &&
+                           FSMState::keyboard->key() == "k";
+                },
+                FSMStringMap.right.at("Passive")
+            )
+        );
 
         auto transitions = param::config["FSM"][state_string]["transitions"];
 

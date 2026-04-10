@@ -43,9 +43,13 @@ State_RLBase::State_RLBase(int state_mode, std::string state_string)
     );
     env->alg = std::make_unique<isaaclab::OrtRunner>(policy_dir / "exported" / "policy.onnx");
 
+    float limit_angle = 1.0f;
+    if (cfg["limit_angle"]) {
+        limit_angle = cfg["limit_angle"].as<float>();
+    }
     this->registered_checks.emplace_back(
         std::make_pair(
-            [&]()->bool{ return isaaclab::mdp::bad_orientation(env.get(), 1.0); },
+            [this, limit_angle]()->bool{ return isaaclab::mdp::bad_orientation(env.get(), limit_angle); },
             FSMStringMap.right.at("Passive")
         )
     );

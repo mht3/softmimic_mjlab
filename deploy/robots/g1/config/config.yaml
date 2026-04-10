@@ -64,10 +64,10 @@ FSM:
 
 
   Velocity:
-    transitions: 
+    transitions:
       Passive: LT + B.on_pressed
       Mimic_Dance1_subject2: RB + A.on_pressed
-
+    limit_angle: 1.0  # radians (~57 deg); triggers passive on fall
     policy_dir: config/policy/velocity
 
 
@@ -75,7 +75,7 @@ FSM:
     transitions:
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
-
+    limit_angle: 1.0  # radians (~57 deg); triggers passive on fall
     motion_file: config/policy/mimic/dance1_subject2/params/dance1_subject2.npz
     policy_dir: config/policy/mimic/dance1_subject2/
     time_start: 0.0
