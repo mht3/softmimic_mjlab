@@ -7,6 +7,7 @@ import torch
 from mjlab.entity import Entity
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.sensor import ContactSensor
+from src.utils.relative_state_obs import relative_state_from_sim
 
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
@@ -52,4 +53,9 @@ def phase(env: ManagerBasedRlEnv, period: float, command_name: str) -> torch.Ten
     stand_mask = torch.linalg.norm(env.command_manager.get_command(command_name), dim=1) < 0.1
     phase = torch.where(stand_mask.unsqueeze(1), torch.zeros_like(phase), phase)
     return phase
+
+
+def relative_state(env: ManagerBasedRlEnv) -> torch.Tensor:
+  """Return simulator-grounded [rel_qpos, rel_qvel] for visitation critic."""
+  return relative_state_from_sim(env)
 

@@ -1,1 +1,1 @@
-"""Velocity tracking environments for legged robots."""
+"""Balance environments for legged robots."""

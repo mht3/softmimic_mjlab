@@ -89,6 +89,12 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
       enable_corruption=False,
       history_length=1,
     ),
+    "relative_state": ObservationGroupCfg(
+      terms={"relative_state": ObservationTermCfg(func=mdp.relative_state)},
+      concatenate_terms=True,
+      enable_corruption=False,
+      history_length=1,
+    ),
   }
 
   ##
@@ -137,7 +143,7 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
       params={"rp_range": 0.0},  # Updated by reset_noise_curriculum or flat env.
     ),
     "push_robot": EventTermCfg(
-      func=mdp.push_by_setting_velocity,
+      func=mdp.push_by_setting_velocity_with_cutoff,
       mode="interval",
       interval_range_s=(2.0, 5.0),
       params={
@@ -149,6 +155,7 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
           "pitch": (-0.78, 0.78),
           "yaw": (-0.78, 0.78),
         },
+        "time_cutoff_s": 17.0,
       },
     ),
     "foot_friction": EventTermCfg(
@@ -238,7 +245,7 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
       weight=0.5,
       params={"sensor_name": "feet_ground_contact"},
     ),
-    "is_alive": RewardTermCfg(func=mdp.is_alive, weight=0.15),
+    "is_alive": RewardTermCfg(func=mdp.is_alive, weight=0.3),
     "is_terminated": RewardTermCfg(func=mdp.is_terminated, weight=-200.0),
     "joint_acc_l2": RewardTermCfg(func=mdp.joint_acc_l2, weight=-2.5e-7),
     "joint_pos_limits": RewardTermCfg(func=mdp.joint_pos_limits, weight=-10.0),

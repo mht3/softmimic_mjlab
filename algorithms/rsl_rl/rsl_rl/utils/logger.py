@@ -94,6 +94,23 @@ class Logger:
             for path in files_to_upload:
                 self.writer.save_file(path)  # type: ignore
 
+    def reset_running_episode_stats(self) -> None:
+        """Zero per-env accumulators after PPO is paused for external env stepping.
+
+        Call this whenever the env is reset or stepped outside the normal PPO
+        rollout loop (e.g. after VC trajectory collection) so that the next
+        episode-done events are not contaminated by stale pre-pause counters.
+
+        The rolling history buffers (rewbuffer, lenbuffer) are intentionally
+        left untouched so that logged means remain continuous across the pause.
+        """
+        self.cur_reward_sum.zero_()
+        self.cur_episode_length.zero_()
+        self.ep_extras.clear()
+        if self.cfg["algorithm"]["rnd_cfg"]:
+            self.cur_ereward_sum.zero_()
+            self.cur_ireward_sum.zero_()
+
     def process_env_step(
         self,
         rewards: torch.Tensor,
@@ -143,6 +160,7 @@ class Logger:
         learning_rate: float,
         action_std: torch.Tensor,
         rnd_weight: float | None,
+        wandb_media: dict | None = None,
         print_minimal: bool = False,
         width: int = 80,
         pad: int = 40,
@@ -260,6 +278,8 @@ class Logger:
 
             # Upload available videos
             if self.logger_type == "wandb":
+                if wandb_media:
+                    self.writer.log_media(wandb_media, it)  # type: ignore
                 for video in pathlib.Path(self.log_dir).rglob("*.mp4"):  # type: ignore
                     self.writer.save_video(video, it)  # type: ignore
 

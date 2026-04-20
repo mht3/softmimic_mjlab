@@ -10,6 +10,7 @@ import os
 import pathlib
 from dataclasses import asdict
 from torch.utils.tensorboard import SummaryWriter
+import matplotlib.pyplot as plt
 
 try:
     import wandb
@@ -92,3 +93,18 @@ class WandbSummaryWriter(SummaryWriter):
         if video.name not in self.logged_videos:
             wandb.log({"video": wandb.Video(str(video), format="mp4")}, step=it)
             self.logged_videos.add(video.name)
+
+    def log_media(self, media: dict, step: int) -> None:
+        """Log non-scalar media (figures/images) to W&B."""
+        if not media:
+            return
+        payload = {}
+        for key, value in media.items():
+            module = type(value).__module__
+            if module.startswith("matplotlib"):
+                payload[key] = wandb.Image(value)
+                plt.close(value)
+
+            else:
+                payload[key] = value
+        wandb.log(payload, step=step)

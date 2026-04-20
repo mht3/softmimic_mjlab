@@ -12,7 +12,8 @@ and a traj_lengths array records how many steps belong to each trajectory.
     state_qvel   : (T_total, 6+N)
     ref_qpos     : (T_total, 7+N)
     ref_qvel     : (T_total, 6+N)
-    traj_lengths : (N_trajs,)  int32 — steps per trajectory
+    traj_lengths : (N_trajs,)  int32 - steps per trajectory
+    rewards      : (N_trajs,) float32 - cumulative reward for trajectory
 
   Reconstruct trajectory i:
     offsets = np.concatenate([[0], np.cumsum(data["traj_lengths"])])
@@ -22,7 +23,7 @@ qpos layout : root_pos_env_local(3) + root_quat_wxyz(4) + joint_pos(N)
 qvel layout : root_lin_vel_body(3)  + root_ang_vel_body(3) + joint_vel(N)
 ref_qvel    : world frame for tracking tasks; zeros for balance tasks.
 
-Perturbation levels (no interval pushes — initial conditions only):
+Perturbation levels (no interval pushes - initial conditions only):
 
   | Level  | init_joint | init_lin_vel | init_z_vel | init_ang_vel | init_pos_z | init_rp |
   |--------|------------|--------------|------------|--------------|------------|---------|
@@ -30,6 +31,7 @@ Perturbation levels (no interval pushes — initial conditions only):
   | small  | 0.1        | 0.5          | 0.2        | 0.78         | 0.01       | 0.1     |
   | medium | 0.2        | 1.25         | 0.2        | 0.78         | 0.01       | 0.3     |
   | hard   | 0.4        | 2.0          | 0.2        | 0.78         | 0.01       | 0.4     |
+  | dataset| Rolls out and saves trajectories generated from a dataset of start states    |
 
 Usage:
   python scripts/collect_dataset.py Unitree-G1-23Dof-Balance-Flat \\
@@ -38,8 +40,12 @@ Usage:
 
   python scripts/collect_dataset.py Unitree-G1-23Dof-Tracking-No-State-Estimation \\
       --policy logs/.../model_10000.pt \\
-      --motion-file src/assets/motions/g1_23dof/walk.npz \\
+      --motion-file src/assets/motions/g1_23dof/swallow_balance.npz \\
       --level small --num-trajectories 1000
+
+  python scripts/collect_dataset.py Unitree-G1-23Dof-Balance-Flat \\
+      --policy logs/rsl_rl/g1_23dof_static_balance/.../model_10000.pt \\
+      --start-states path/to/generated_start_states.npz --num-envs 64
 """
 
 import argparse
@@ -103,10 +109,12 @@ def _empty_buffer() -> dict[str, list]:
 def _flush_dataset(
     combined: dict[str, list],
     traj_lengths: list,
+    traj_rewards: list,
     output_path: Path,
 ) -> None:
     arrays = {k: np.concatenate(combined[k], axis=0).astype(np.float32) for k in _FIELD_NAMES}
     arrays["traj_lengths"] = np.array(traj_lengths, dtype=np.int32)
+    arrays["rewards"] = np.array(traj_rewards, dtype=np.float32)
     np.savez_compressed(output_path, **arrays)
 
 
@@ -205,6 +213,42 @@ def _apply_init_noise_balance(
     robot.clear_state(env_ids=env_ids)
 
 
+def _apply_start_state_balance(
+    robot,
+    env_id: int,
+    device: torch.device,
+    env_origins: torch.Tensor,
+    qpos: torch.Tensor,
+    qvel: torch.Tensor,
+) -> None:
+    """Write exact qpos/qvel into one env for dataset start-state mode.
+
+    qpos layout: root_pos_env_local(3) + root_quat_wxyz(4) + joint_pos(N)
+    qvel layout: root_lin_vel_body(3)  + root_ang_vel_body(3) + joint_vel(N)
+    Velocities are converted from body to world frame before writing.
+    """
+    env_ids = torch.tensor([env_id], device=device)
+
+    root_pos_local = qpos[:3].unsqueeze(0)
+    root_quat = qpos[3:7].unsqueeze(0)
+    joint_pos = qpos[7:].unsqueeze(0)
+
+    lin_vel_b = qvel[:3].unsqueeze(0)
+    ang_vel_b = qvel[3:6].unsqueeze(0)
+    joint_vel = qvel[6:].unsqueeze(0)
+
+    robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+
+    root_pos_w = root_pos_local + env_origins[env_id : env_id + 1]
+    lin_vel_w = quat_apply(root_quat, lin_vel_b)
+    ang_vel_w = quat_apply(root_quat, ang_vel_b)
+
+    root_state = torch.cat([root_pos_w, root_quat, lin_vel_w, ang_vel_w], dim=-1)
+    robot.write_root_state_to_sim(root_state, env_ids=env_ids)
+
+    robot.clear_state(env_ids=env_ids)
+
+
 @torch.no_grad()
 def collect_dataset(
     env: RslRlVecEnvWrapper,
@@ -246,11 +290,13 @@ def collect_dataset(
     bal_ref_qvel = torch.zeros(num_envs, 6 + n_joints, device=device)
 
     env_buffers: list[dict[str, list]] = [_empty_buffer() for _ in range(num_envs)]
+    env_cum_rewards: list[float] = [0.0] * num_envs
     saved_count = 0
 
     # Accumulator for combined NPZ.
     combined: dict[str, list] = {k: [] for k in _FIELD_NAMES}
     traj_lengths: list[int] = []
+    traj_rewards: list[float] = []
 
     obs, _ = env.reset()
 
@@ -319,7 +365,8 @@ def collect_dataset(
         actions = policy(obs)
         actions_np = actions.cpu().numpy()
 
-        obs, _, dones, _ = env.step(actions)
+        obs, rewards, dones, _ = env.step(actions)
+        rewards_np = rewards.cpu().numpy()
 
         # Append step data to per-env buffers.
         for i in range(num_envs):
@@ -331,6 +378,7 @@ def collect_dataset(
             buf["state_qvel"].append(state_qvel_np[i])
             buf["ref_qpos"].append(ref_qpos_np[i])
             buf["ref_qvel"].append(ref_qvel_np[i])
+            env_cum_rewards[i] += float(rewards_np[i])
 
         done_mask = dones.bool()
         if not done_mask.any():
@@ -342,15 +390,18 @@ def collect_dataset(
 
         for i in done_ids.tolist():
             buf = env_buffers[i]
-            if len(buf["actions"]) >= 2 and saved_count < num_trajectories:
+            # Save any non-empty trajectory, including very short episodes.
+            if len(buf["actions"]) > 0 and saved_count < num_trajectories:
                 T = len(buf["actions"])
                 for k in _FIELD_NAMES:
                     combined[k].append(np.array(buf[k], dtype=np.float32))
                 traj_lengths.append(T)
+                traj_rewards.append(env_cum_rewards[i])
                 saved_count += 1
                 pbar.update(1)
 
             env_buffers[i] = _empty_buffer()
+            env_cum_rewards[i] = 0.0
 
             if not is_tracking:
                 # After env.step() the done env has been reset; robot.data reflects
@@ -371,7 +422,164 @@ def collect_dataset(
                     robot.update(env.unwrapped.step_dt)
 
     pbar.close()
-    _flush_dataset(combined, traj_lengths, output_dir / f"{name}.npz")
+    _flush_dataset(combined, traj_lengths, traj_rewards, output_dir / f"{name}.npz")
+    return saved_count
+
+
+@torch.no_grad()
+def collect_dataset_from_start_states(
+    env: RslRlVecEnvWrapper,
+    policy,
+    start_qpos: torch.Tensor,
+    start_qvel: torch.Tensor,
+    start_ref_qpos: torch.Tensor | None,
+    start_ref_qvel: torch.Tensor | None,
+    output_dir: Path,
+    device: torch.device,
+    name: str = "dataset",
+) -> int:
+    """Collect trajectories by resetting each env to an exact start state.
+
+    One trajectory per start state. Balance tasks only.
+    """
+    robot = env.unwrapped.scene["robot"]
+    num_envs = env.num_envs
+    env_origins = env.unwrapped.scene.env_origins.clone()
+    default_joint_pos = robot.data.default_joint_pos.clone()
+    n_joints = default_joint_pos.shape[1]
+    num_states = start_qpos.shape[0]
+
+    bal_ref_qpos = torch.zeros(num_envs, 7 + n_joints, device=device)
+    bal_ref_qvel = torch.zeros(num_envs, 6 + n_joints, device=device)
+
+    env_buffers: list[dict[str, list]] = [_empty_buffer() for _ in range(num_envs)]
+    env_cum_rewards: list[float] = [0.0] * num_envs
+    env_active: list[bool] = [False] * num_envs
+    saved_count = 0
+    next_idx = 0
+
+    combined: dict[str, list] = {k: [] for k in _FIELD_NAMES}
+    traj_lengths: list[int] = []
+    traj_rewards: list[float] = []
+
+    obs, _ = env.reset()
+
+    def _assign_next(env_id: int) -> bool:
+        """Assign the next start state to env_id. Returns False if none remain."""
+        nonlocal next_idx
+        if next_idx >= num_states:
+            return False
+        # Capture equilibrium reference BEFORE overwriting with start state.
+        # robot.data still reflects the clean reset at this point.
+        if start_ref_qpos is not None:
+            bal_ref_qpos[env_id] = start_ref_qpos[next_idx]
+        else:
+            _update_bal_ref_qpos(
+                bal_ref_qpos, robot, env_origins, default_joint_pos, env_id
+            )
+        if start_ref_qvel is not None:
+            bal_ref_qvel[env_id] = start_ref_qvel[next_idx]
+        _apply_start_state_balance(
+            robot, env_id, device, env_origins,
+            start_qpos[next_idx], start_qvel[next_idx],
+        )
+        next_idx += 1
+        return True
+
+    initial_batch = min(num_envs, num_states)
+    for i in range(initial_batch):
+        env_active[i] = _assign_next(i)
+    robot.update(env.unwrapped.step_dt)
+
+    pbar = tqdm(total=num_states, desc="Trajectories", unit="traj")
+
+    while saved_count < num_states:
+        if not any(env_active):
+            break
+
+        pos_w = robot.data.root_link_pos_w
+        quat_w = robot.data.root_link_quat_w
+        lin_vel_b = robot.data.root_link_lin_vel_b
+        ang_vel_b = robot.data.root_link_ang_vel_b
+        joint_pos = robot.data.joint_pos
+        joint_vel = robot.data.joint_vel
+
+        state_qpos = torch.cat(
+            [pos_w - env_origins, quat_w, joint_pos], dim=-1
+        )
+        state_qvel = torch.cat(
+            [lin_vel_b, ang_vel_b, joint_vel], dim=-1
+        )
+
+        obs_policy_np = obs["actor"].cpu().numpy()
+        obs_critic_np = obs["critic"].cpu().numpy()
+        state_qpos_np = state_qpos.cpu().numpy()
+        state_qvel_np = state_qvel.cpu().numpy()
+        ref_qpos_np = bal_ref_qpos.cpu().numpy()
+        ref_qvel_np = bal_ref_qvel.cpu().numpy()
+
+        actions = policy(obs)
+        actions_np = actions.cpu().numpy()
+
+        obs, rewards, dones, _ = env.step(actions)
+        rewards_np = rewards.cpu().numpy()
+
+        for i in range(num_envs):
+            if not env_active[i]:
+                continue
+            buf = env_buffers[i]
+            buf["obs_policy"].append(obs_policy_np[i])
+            buf["obs_critic"].append(obs_critic_np[i])
+            buf["actions"].append(actions_np[i])
+            buf["state_qpos"].append(state_qpos_np[i])
+            buf["state_qvel"].append(state_qvel_np[i])
+            buf["ref_qpos"].append(ref_qpos_np[i])
+            buf["ref_qvel"].append(ref_qvel_np[i])
+            env_cum_rewards[i] += float(rewards_np[i])
+
+        done_mask = dones.bool()
+        if not done_mask.any():
+            continue
+
+        done_ids = done_mask.nonzero(as_tuple=False).squeeze(-1)
+        if done_ids.dim() == 0:
+            done_ids = done_ids.unsqueeze(0)
+
+        needs_update = False
+        for i in done_ids.tolist():
+            if not env_active[i]:
+                continue
+            buf = env_buffers[i]
+            # Save any non-empty trajectory, including very short episodes.
+            if len(buf["actions"]) > 0:
+                T = len(buf["actions"])
+                for k in _FIELD_NAMES:
+                    combined[k].append(np.array(buf[k], dtype=np.float32))
+                traj_lengths.append(T)
+                traj_rewards.append(env_cum_rewards[i])
+                saved_count += 1
+                pbar.update(1)
+
+            env_buffers[i] = _empty_buffer()
+            env_cum_rewards[i] = 0.0
+
+            if _assign_next(i):
+                needs_update = True
+            else:
+                env_active[i] = False
+
+        if needs_update:
+            robot.update(env.unwrapped.step_dt)
+
+    pbar.close()
+
+    if saved_count < num_states:
+        print(
+            f"[WARN] Only saved {saved_count}/{num_states} trajectories "
+            f"(some may have been too short)."
+        )
+
+    _flush_dataset(combined, traj_lengths, traj_rewards, output_dir / f"{name}.npz")
     return saved_count
 
 
@@ -397,6 +605,10 @@ def main():
                         help="Number of parallel environments (default: 64).")
     parser.add_argument("--motion-file", type=str, default=None,
                         help="NPZ motion file (required for tracking tasks).")
+    parser.add_argument("--start-states", type=str, default=None, metavar="PATH",
+                        help="NPZ with 'qpos' (N,30) and 'qvel' (N,29) arrays of start "
+                             "states. One trajectory per start state (balance tasks only). "
+                             "Overrides --init-perturb-mode.")
     parser.add_argument("--output-dir", type=str, default=None,
                         help="Output directory. Default: <checkpoint_dir>/dataset/")
     parser.add_argument("--device", type=str, default=None)
@@ -409,7 +621,10 @@ def main():
     args = parser.parse_args()
 
     if args.name is None:
-        args.name = f"dataset_{args.init_perturb_mode}"
+        if args.start_states:
+            args.name = "dataset_start_states"
+        else:
+            args.name = f"dataset_{args.init_perturb_mode}"
 
     configure_torch_backends()
     device = args.device or ("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -420,7 +635,16 @@ def main():
     if not ckpt_path.exists():
         parser.error(f"Checkpoint not found: {ckpt_path}")
 
-    spec = PERTURB_LEVELS[args.init_perturb_mode]
+    if args.start_states:
+        spec = PERTURB_LEVELS["none"]
+        start_states_path = Path(args.start_states).expanduser().resolve()
+        if not start_states_path.exists():
+            parser.error(f"Start states file not found: {start_states_path}")
+        ss_data = np.load(str(start_states_path))
+        if "qpos" not in ss_data or "qvel" not in ss_data:
+            parser.error("Start states NPZ must contain 'qpos' and 'qvel' arrays.")
+    else:
+        spec = PERTURB_LEVELS[args.init_perturb_mode]
 
     # --- Environment ---
     env_cfg = load_env_cfg(args.task, play=False)
@@ -440,7 +664,7 @@ def main():
         and isinstance(env_cfg.commands["motion"], MotionCommandCfg)
     )
 
-    # Zero built-in balance reset noise — _apply_init_noise_balance is the sole
+    # Zero built-in balance reset noise - _apply_init_noise_balance is the sole
     # source of init perturbation (matching the approach in evaluate.py).
     if not is_tracking:
         if hasattr(env_cfg, "events") and "reset_base" in (env_cfg.events or {}):
@@ -498,6 +722,34 @@ def main():
     runner.load(str(ckpt_path), load_cfg={"actor": True}, strict=True, map_location=device)
     policy = runner.get_inference_policy(device=device)
 
+    # --- Validate and prepare start states ---
+    if args.start_states:
+        if is_tracking:
+            parser.error("--start-states is only supported for balance tasks, not tracking.")
+        n_joints_env = env.scene["robot"].data.joint_pos.shape[1]
+        expected_qpos_dim = 7 + n_joints_env
+        expected_qvel_dim = 6 + n_joints_env
+        if ss_data["qpos"].shape[1] != expected_qpos_dim:
+            parser.error(
+                f"qpos dim mismatch: got {ss_data['qpos'].shape[1]}, "
+                f"expected {expected_qpos_dim} (7 + {n_joints_env} joints)"
+            )
+        if ss_data["qvel"].shape[1] != expected_qvel_dim:
+            parser.error(
+                f"qvel dim mismatch: got {ss_data['qvel'].shape[1]}, "
+                f"expected {expected_qvel_dim} (6 + {n_joints_env} joints)"
+            )
+        ss_qpos = torch.tensor(ss_data["qpos"], dtype=torch.float32, device=device)
+        ss_qvel = torch.tensor(ss_data["qvel"], dtype=torch.float32, device=device)
+        ss_ref_qpos = (
+            torch.tensor(ss_data["ref_qpos"], dtype=torch.float32, device=device)
+            if "ref_qpos" in ss_data else None
+        )
+        ss_ref_qvel = (
+            torch.tensor(ss_data["ref_qvel"], dtype=torch.float32, device=device)
+            if "ref_qvel" in ss_data else None
+        )
+
     # --- Output directory ---
     if args.output_dir:
         output_dir = Path(args.output_dir)
@@ -507,30 +759,45 @@ def main():
 
     print(f"[INFO] Task:         {args.task}")
     print(f"[INFO] Checkpoint:   {ckpt_path}")
-    print(f"[INFO] Level:        {args.init_perturb_mode}  {spec}")
+    if args.start_states:
+        print(f"[INFO] Mode:         dataset (start-states)")
+        print(f"[INFO] Start states: {start_states_path}  ({ss_qpos.shape[0]} states)")
+    else:
+        print(f"[INFO] Level:        {args.init_perturb_mode}  {spec}")
+        print(f"[INFO] Trajectories: {args.num_trajectories}")
     print(f"[INFO] Output:       {output_dir}")
-    print(f"[INFO] Trajectories: {args.num_trajectories}")
     print(f"[INFO] Envs:         {args.num_envs}")
     print(f"[INFO] Tracking:     {is_tracking}")
 
-    saved = collect_dataset(
-        env_wrapped, policy,
-        args.num_trajectories, output_dir,
-        is_tracking, torch.device(device),
-        spec["init_joint_range"], spec["init_lin_vel_range"],
-        spec["init_z_vel_range"], spec["init_ang_vel_range"],
-        spec["init_pos_z_range"], spec["init_rp_range"],
-        name=args.name,
-    )
+    if args.start_states:
+        saved = collect_dataset_from_start_states(
+            env_wrapped, policy,
+            ss_qpos, ss_qvel, ss_ref_qpos, ss_ref_qvel,
+            output_dir, torch.device(device),
+            name=args.name,
+        )
+    else:
+        saved = collect_dataset(
+            env_wrapped, policy,
+            args.num_trajectories, output_dir,
+            is_tracking, torch.device(device),
+            spec["init_joint_range"], spec["init_lin_vel_range"],
+            spec["init_z_vel_range"], spec["init_ang_vel_range"],
+            spec["init_pos_z_range"], spec["init_rp_range"],
+            name=args.name,
+        )
 
     metadata = {
         "task": args.task,
         "checkpoint": str(ckpt_path),
-        "num_trajectories_requested": args.num_trajectories,
+        "num_trajectories_requested": (
+            ss_qpos.shape[0] if args.start_states else args.num_trajectories
+        ),
         "num_trajectories_saved": saved,
         "num_envs": args.num_envs,
         "seed": args.seed,
-        "level": args.init_perturb_mode,
+        "level": "dataset" if args.start_states else args.init_perturb_mode,
+        "start_states_file": str(start_states_path) if args.start_states else None,
         "disable_obs_noise": args.disable_obs_noise,
         "is_tracking": is_tracking,
         "motion_file": (

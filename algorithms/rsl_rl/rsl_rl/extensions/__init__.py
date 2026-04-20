@@ -7,9 +7,12 @@
 
 from .rnd import RandomNetworkDistillation, resolve_rnd_config
 from .symmetry import resolve_symmetry_config
+from .visitation_critic import VisitationCritic, resolve_visitation_critic_config
 
 __all__ = [
     "RandomNetworkDistillation",
+    "VisitationCritic",
     "resolve_rnd_config",
     "resolve_symmetry_config",
+    "resolve_visitation_critic_config",
 ]

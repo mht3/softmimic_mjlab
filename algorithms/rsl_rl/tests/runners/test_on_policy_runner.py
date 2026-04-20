@@ -49,6 +49,10 @@ class DummyEnv(VecEnv):
         extras = {"time_outs": torch.zeros(self.num_envs, device=self.device)}
         return obs, rewards, dones, extras
 
+    def set_reset_states(self, env_ids: torch.Tensor, states: torch.Tensor) -> torch.Tensor | None:  # noqa: ARG002
+        """No-op for tests (visitation critic not used)."""
+        return None
+
 
 def _make_train_cfg(model_type: str = "mlp") -> dict:
     """Return a minimal training configuration for PPO.

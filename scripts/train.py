@@ -13,7 +13,7 @@ from typing import Literal, cast
 import tyro
 
 from mjlab.envs import ManagerBasedRlEnv, ManagerBasedRlEnvCfg
-from mjlab.rl import MjlabOnPolicyRunner, RslRlBaseRunnerCfg, RslRlVecEnvWrapper
+from mjlab.rl import MjlabOnPolicyRunner, RslRlBaseRunnerCfg
 from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg, load_runner_cls
 from mjlab.tasks.tracking.mdp import MotionCommandCfg
 from mjlab.utils.gpu import select_gpus
@@ -21,6 +21,7 @@ from mjlab.utils.os import dump_yaml, get_checkpoint_path
 from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
 from src.utils.deploy_export import export_deploy_cfg
+from src.utils.vecenv_wrapper import RslRlVecEnvSpecialResetWrapper
 
 
 def _write_params_training_scripts(log_dir: Path) -> None:
@@ -61,6 +62,7 @@ class TrainConfig:
   enable_nan_guard: bool = False
   torchrunx_log_dir: str | None = None
   gpu_ids: list[int] | Literal["all"] | None = field(default_factory=lambda: [0])
+  init_at_random_ep_len: bool = True
 
   @staticmethod
   def from_task(task_id: str) -> "TrainConfig":
@@ -144,7 +146,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     )
     print("[INFO] Recording videos during training.")
 
-  env = RslRlVecEnvWrapper(env, clip_actions=cfg.agent.clip_actions)
+  env = RslRlVecEnvSpecialResetWrapper(env, clip_actions=cfg.agent.clip_actions)
 
   agent_cfg = asdict(cfg.agent)
   env_cfg = asdict(cfg.env)
@@ -169,7 +171,8 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     export_deploy_cfg(base_env, log_dir)
 
   runner.learn(
-    num_learning_iterations=cfg.agent.max_iterations, init_at_random_ep_len=True
+    num_learning_iterations=cfg.agent.max_iterations,
+    init_at_random_ep_len=cfg.init_at_random_ep_len,
   )
 
   env.close()

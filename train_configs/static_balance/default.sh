@@ -19,6 +19,7 @@ LEARNING_RATE=1e-3
 NUM_STEPS_PER_ENV=24
 
 python scripts/train.py "$TASK" \
+  --init-at-random-ep-len False \
   --env.scene.num-envs "$NUM_ENVS" \
   --agent.max-iterations "$MAX_ITERATIONS" \
   --agent.algorithm.learning-rate "$LEARNING_RATE" \

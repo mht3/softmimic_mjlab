@@ -39,6 +39,9 @@ class OnPolicyRunner:
         alg_class: type[PPO] = resolve_callable(self.cfg["algorithm"]["class_name"])  # type: ignore
         self.alg = alg_class.construct_algorithm(obs, self.env, self.cfg, self.device)
 
+        # Visitation critic is owned by PPO.
+        self.visitation_critic = self.alg.visitation_critic
+
         # Create the logger
         self.logger = Logger(
             log_dir=log_dir,
@@ -78,8 +81,31 @@ class OnPolicyRunner:
         total_it = start_it + num_learning_iterations
         for it in range(start_it, total_it):
             start = time.time()
+            # Before PPO rollout: pause and collect a deterministic trajectory buffer
+            # for the visitation critic if this iteration is a VC training step.
             # Rollout
             with torch.inference_mode():
+                if self.visitation_critic is not None and self.visitation_critic.should_collect(it):
+                    collect_start = time.time()
+                    n_collected = self.visitation_critic.collect_trajectories(self.env, self.alg.actor)
+                    print(
+                        f"[VC] Collected {n_collected} deterministic trajectories "
+                        f"in {time.time() - collect_start:.1f}s (iter {it})."
+                    )
+                    # Start PPO rollout from a clean reset distribution after collection.
+                    obs, extras = self.env.reset()
+                    obs = obs.to(self.device)
+                    # De-synchronize episode lengths to avoid wave-like completion spikes in logs.
+                    self.env.episode_length_buf = torch.randint_like(
+                        self.env.episode_length_buf, high=int(self.env.max_episode_length)
+                    )
+                    # Clear stale extras from the full reset so the first PPO step
+                    # doesn't log inflated VC-collection episode rewards.
+                    if "log" in extras:
+                        extras["log"].clear()
+                    if "episode" in extras:
+                        extras["episode"].clear()
+                    self.logger.reset_running_episode_stats()
                 for _ in range(self.cfg["num_steps_per_env"]):
                     # Sample actions
                     actions = self.alg.act(obs)
@@ -92,6 +118,28 @@ class OnPolicyRunner:
                     obs, rewards, dones = (obs.to(self.device), rewards.to(self.device), dones.to(self.device))
                     # Process the step
                     self.alg.process_env_step(obs, rewards, dones, extras)
+                    # Override reset states with VC-generated states for envs that just terminated.
+                    if self.visitation_critic is not None and self.visitation_critic.is_trained and dones.any():
+                        done_env_ids = torch.where(dones > 0)[0]
+                        reset_states = self.visitation_critic.generate_reset_states(len(done_env_ids))
+                        target_abs_qpos = self.env.set_reset_states(done_env_ids, reset_states)
+                        # Re-fetch observations so the actor sees the VC-generated state.
+                        obs = self.env.get_observations().to(self.device)
+                        # Absolute qpos error: target written vs simulator robot state (same layout as dataset).
+                        if target_abs_qpos is not None:
+                            env_u = self.env.unwrapped
+                            robot = env_u.scene["robot"]
+                            origins = env_u.scene.env_origins[done_env_ids]
+                            pos_w = robot.data.root_link_pos_w[done_env_ids]
+                            quat_w = robot.data.root_link_quat_w[done_env_ids]
+                            joint_pos = robot.data.joint_pos[done_env_ids]
+                            curr_abs_qpos = torch.cat([pos_w - origins, quat_w, joint_pos], dim=-1)
+                            abs_qpos_err = torch.linalg.norm(
+                                curr_abs_qpos - target_abs_qpos.to(self.device), dim=-1
+                            )
+                            log_dict = extras.setdefault("log", {})
+                            log_dict["visitation_critic/reset_abs_qpos_error_mean"] = abs_qpos_err.mean()
+                            log_dict["visitation_critic/reset_abs_qpos_error_max"] = abs_qpos_err.max()
                     # Extract intrinsic rewards if RND is used (only for logging)
                     intrinsic_rewards = self.alg.intrinsic_rewards if self.cfg["algorithm"]["rnd_cfg"] else None
                     # Book keeping
@@ -105,7 +153,7 @@ class OnPolicyRunner:
                 self.alg.compute_returns(obs)
 
             # Update policy
-            loss_dict = self.alg.update()
+            loss_dict = self.alg.update(iteration=it)
 
             stop = time.time()
             learn_time = stop - start
@@ -122,6 +170,7 @@ class OnPolicyRunner:
                 learning_rate=self.alg.learning_rate,
                 action_std=self.alg.get_policy().output_std,
                 rnd_weight=self.alg.rnd.weight if self.cfg["algorithm"]["rnd_cfg"] else None,
+                wandb_media=getattr(self.alg, "vc_wandb_media", None),
             )
 
             # Save model

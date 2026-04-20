@@ -6,10 +6,31 @@ from typing import TYPE_CHECKING
 
 import torch
 
+from mjlab.envs.mdp.events import push_by_setting_velocity
+from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.utils.lab_api.math import quat_apply, quat_from_euler_xyz, quat_mul
 
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
+
+
+def push_by_setting_velocity_with_cutoff(
+  env: ManagerBasedRlEnv,
+  env_ids: torch.Tensor,
+  velocity_range: dict[str, tuple[float, float]],
+  time_cutoff_s: float = 17.0,
+  asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> None:
+  """Apply a velocity push, but skip envs whose episode time has passed `time_cutoff_s`.
+
+  This leaves the final `max_episode_length_s - time_cutoff_s` seconds push-free so
+  the agent can recover before episode end.
+  """
+  cutoff_step = int(time_cutoff_s / env.step_dt)
+  mask = env.episode_length_buf[env_ids] < cutoff_step
+  if not bool(mask.any()):
+    return
+  push_by_setting_velocity(env, env_ids[mask], velocity_range, asset_cfg)
 
 
 def reset_rp_noise(
