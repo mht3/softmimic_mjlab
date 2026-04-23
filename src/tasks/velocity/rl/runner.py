@@ -7,10 +7,10 @@ from mjlab.rl.exporter_utils import (
   attach_metadata_to_onnx,
   get_base_metadata,
 )
-from mjlab.rl.runner import MjlabOnPolicyRunner
+from src.utils.mjlab_on_policy_runner_with_eval import MjlabOnPolicyRunnerWithEval
 
 
-class VelocityOnPolicyRunner(MjlabOnPolicyRunner):
+class VelocityOnPolicyRunner(MjlabOnPolicyRunnerWithEval):
   env: RslRlVecEnvWrapper
 
   def save(self, path: str, infos=None):

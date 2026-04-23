@@ -94,15 +94,26 @@ def unitree_g1_23dof_balance_push_curriculum_env_cfg(play: bool = False) -> Mana
 
 
 def unitree_g1_23dof_flat_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
-  """G1-23DOF flat balance env - no push curriculum, constant medium-level init noise."""
+  """G1-23DOF flat balance env - no push curriculum, constant medium-level init noise.
+
+  Numbers are pinned to the curriculum's stage 2 ("medium") so this task trains
+  at the exact difficulty the eval script calls "medium": ±1.25 linear velocity,
+  ±1.18 angular velocity (reset + push), ±0.3 rad roll/pitch init tilt.
+  """
   cfg = unitree_g1_23dof_balance_push_curriculum_env_cfg(play=play)
   cfg.curriculum.pop("push_velocity", None)
   cfg.curriculum.pop("reset_noise", None)  # Fixed at medium level
   cfg.events["reset_base"].params["velocity_range"] = {
     "x": (-1.25, 1.25), "y": (-1.25, 1.25), "z": (-0.2, 0.2),
-    "roll": (-0.78, 0.78), "pitch": (-0.78, 0.78), "yaw": (-0.78, 0.78),
+    "roll": (-1.18, 1.18), "pitch": (-1.18, 1.18), "yaw": (-1.18, 1.18),
   }
   cfg.events["reset_base"].params["pose_range"]["z"] = (-0.01, 0.01)
   cfg.events["reset_robot_joints"].params["position_range"] = (-0.2, 0.2)
   cfg.events["reset_rp_noise"].params["rp_range"] = 0.3
+  # play=True pops push_robot in the base config; only widen it when it exists.
+  if "push_robot" in cfg.events:
+    cfg.events["push_robot"].params["velocity_range"] = {
+      "x": (-1.25, 1.25), "y": (-1.25, 1.25), "z": (-0.2, 0.2),
+      "roll": (-1.18, 1.18), "pitch": (-1.18, 1.18), "yaw": (-1.18, 1.18),
+    }
   return cfg

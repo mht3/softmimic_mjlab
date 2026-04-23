@@ -14,6 +14,7 @@ from tensordict import TensorDict
 
 from rsl_rl.env import VecEnv
 from rsl_rl.runners import OnPolicyRunner
+from rsl_rl.runners.on_policy_runner import _episode_reward_extra_snapshot
 
 NUM_ENVS = 4
 OBS_DIM = 8
@@ -33,6 +34,10 @@ class DummyEnv(VecEnv):
         self.device = device
         self.cfg = {}
         self._include_image = include_image
+
+    def reset(self) -> tuple[TensorDict, dict]:  # noqa: D102
+        self.episode_length_buf.zero_()
+        return self.get_observations(), {}
 
     def get_observations(self) -> TensorDict:  # noqa: D102
         data: dict = {"policy": torch.randn(self.num_envs, OBS_DIM, device=self.device)}
@@ -385,3 +390,149 @@ class TestCNNRunner:
 
             for key, param in runner.alg.actor.state_dict().items():
                 assert torch.equal(saved_actor[key], param), f"CNN parameter '{key}' not restored after load"
+
+
+class TestRunnerEvaluation:
+    """Tests for the periodic evaluation path."""
+
+    def test_should_evaluate_gating(self) -> None:
+        """_should_evaluate respects eval config and iteration cadence."""
+        eval_env = DummyEnv()
+
+        def _cfg_with(eval_cfg: dict | None) -> dict:
+            c = _make_train_cfg()
+            if eval_cfg is not None:
+                c["eval"] = eval_cfg
+            return c
+
+        runner = OnPolicyRunner(
+            DummyEnv(),
+            _cfg_with({"enabled": True, "eval_every_n_iters": 10, "eval_num_episodes": 4}),
+            log_dir=None, device="cpu", eval_env=eval_env,
+        )
+        assert runner._should_evaluate(0) is True
+        assert runner._should_evaluate(5) is False
+        assert runner._should_evaluate(10) is True
+
+        # With no eval_env, always False.
+        runner2 = OnPolicyRunner(
+            DummyEnv(),
+            _cfg_with({"enabled": True, "eval_every_n_iters": 10}),
+            log_dir=None, device="cpu", eval_env=None,
+        )
+        assert runner2._should_evaluate(0) is False
+
+        # With eval disabled, always False.
+        runner3 = OnPolicyRunner(
+            DummyEnv(),
+            _cfg_with({"enabled": False}),
+            log_dir=None, device="cpu", eval_env=eval_env,
+        )
+        assert runner3._should_evaluate(0) is False
+
+    def test_episode_reward_extra_snapshot_matches_logger_merge(self) -> None:
+        """mjlab-style ``Episode_Reward/*`` lives under ``log`` (and optionally ``episode``)."""
+        extras = {
+            "log": {"Episode_Reward/foo": torch.tensor(1.0), "metrics/x": 2.0},
+            "episode": {"Episode_Reward/bar": torch.tensor(3.0)},
+        }
+        snap = _episode_reward_extra_snapshot(extras)
+        assert set(snap.keys()) == {"Episode_Reward/foo", "Episode_Reward/bar"}
+
+    def test_evaluate_aggregates_mean_reward_and_length(self) -> None:
+        """_evaluate writes correct scalars after running rollouts."""
+        from unittest.mock import MagicMock
+
+        eval_env = DummyEnv()
+        cfg = _make_train_cfg()
+        cfg["eval"] = {
+            "enabled": True,
+            "eval_every_n_iters": 10,
+            "eval_num_episodes": 8,
+        }
+        runner = OnPolicyRunner(DummyEnv(), cfg, log_dir=None, device="cpu", eval_env=eval_env)
+        writer = MagicMock()
+        runner.logger.writer = writer
+
+        runner._evaluate(it=42)
+
+        logged_keys = {call.args[0] for call in writer.add_scalar.call_args_list}
+        logged_its = {call.args[2] for call in writer.add_scalar.call_args_list}
+        assert "Evaluate/mean_reward" in logged_keys
+        assert "Evaluate/mean_episode_length" in logged_keys
+        assert "Evaluate/num_episodes" in logged_keys
+        assert logged_its == {42}
+
+    def test_evaluate_episode_reward_extras_from_env(self) -> None:
+        """_evaluate logs ``Evaluate/Episode_Reward/...`` when the env supplies mjlab-style keys."""
+        from unittest.mock import MagicMock
+
+        class DummyEnvWithEpisodeRewardLog(DummyEnv):
+            def step(self, actions: torch.Tensor) -> tuple[TensorDict, torch.Tensor, torch.Tensor, dict]:
+                obs, rew, dones, extras = super().step(actions)
+                out_extras = dict(extras)
+                out_extras["log"] = {
+                    "Episode_Reward/test_term": torch.tensor(0.5, device=self.device),
+                }
+                return obs, rew, dones, out_extras
+
+        eval_env = DummyEnvWithEpisodeRewardLog()
+        cfg = _make_train_cfg()
+        cfg["eval"] = {
+            "enabled": True,
+            "eval_every_n_iters": 10,
+            "eval_num_episodes": 8,
+        }
+        runner = OnPolicyRunner(DummyEnv(), cfg, log_dir=None, device="cpu", eval_env=eval_env)
+        writer = MagicMock()
+        runner.logger.writer = writer
+
+        runner._evaluate(it=7)
+
+        logged_keys = {call.args[0] for call in writer.add_scalar.call_args_list}
+        logged_its = {call.args[2] for call in writer.add_scalar.call_args_list}
+        assert "Evaluate/mean_reward" in logged_keys
+        assert "Evaluate/mean_episode_length" in logged_keys
+        assert "Evaluate/num_episodes" in logged_keys
+        assert "Evaluate/Episode_Reward/test_term" in logged_keys
+        assert logged_its == {7}
+
+    def test_evaluate_noop_when_no_env(self) -> None:
+        """_evaluate should be safe to skip when eval_env is None."""
+        runner = OnPolicyRunner(DummyEnv(), _make_train_cfg(), log_dir=None, device="cpu")
+        assert runner.eval_env is None
+        # _should_evaluate returns False so _evaluate is never called.
+        assert runner._should_evaluate(0) is False
+
+    def test_evaluate_rnn_resets_hidden_state_on_done(self) -> None:
+        """_evaluate must zero RNN hidden state for done envs so episodes don't bleed into each other."""
+        from unittest.mock import MagicMock, patch
+
+        eval_env = DummyEnv()
+        cfg = _make_train_cfg(model_type="rnn")
+        cfg["eval"] = {
+            "enabled": True,
+            "eval_every_n_iters": 10,
+            "eval_num_episodes": 8,
+        }
+        runner = OnPolicyRunner(DummyEnv(), cfg, log_dir=None, device="cpu", eval_env=eval_env)
+        writer = MagicMock()
+        runner.logger.writer = writer
+
+        reset_calls: list = []
+        original_reset = runner.alg.actor.reset
+
+        def _spy_reset(*args, **kwargs):
+            reset_calls.append(args)
+            return original_reset(*args, **kwargs)
+
+        with patch.object(runner.alg.actor, "reset", side_effect=_spy_reset):
+            runner._evaluate(it=0)
+
+        # reset() must have been called at least twice: once unconditionally at the
+        # start (full clear) and at least once on episode boundaries.
+        assert len(reset_calls) >= 2, (
+            f"Expected >=2 actor.reset() calls during RNN eval, got {len(reset_calls)}"
+        )
+        # The first call is the unconditional full-clear (no args).
+        assert reset_calls[0] == (), "First reset() call should have no arguments (full clear)"

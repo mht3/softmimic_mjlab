@@ -22,16 +22,20 @@ class VisitationCriticCfg:
   learning_rate: float = 3e-4
   batch_size: int = 1024
   max_trajectories: int = 10000
-  guidance_scale: float = 2.0
+  guidance_scale: float = 2.5
   num_euler_steps: int = 100
   cfg_dropout_prob: float = 0.2
   reset_condition_label: int = 0
+  # Probabilistic bin sampling for reward_bins mode. Must have length 4
+  # and sum to 1.0. Order: (fail-low, fail-high, succeed-low, succeed-high).
+  reset_bin_probs: tuple[float, ...] = (0.25, 0.50, 0.20, 0.05)
   # CFM vector-field network architecture.
-  hidden_dims: tuple[int, ...] = (512, 512, 512)
+  hidden_dims: tuple[int, ...] = (1024, 1024, 1024)
   class_dim: int = 8
   # Deterministic trajectory collection (runs right before each VC training step).
   num_collect_trajectories: int = 10000
   disable_push_during_collection: bool = False
+  max_num_trains: int = 1  # -1 = unlimited; M > 0 = train at most M times total
 
 
 @dataclass
@@ -39,9 +43,30 @@ class RslRlPpoAlgorithmCfgWithVc(RslRlPpoAlgorithmCfg):
   visitation_critic_cfg: VisitationCriticCfg = field(default_factory=VisitationCriticCfg)
 
 
+@dataclass
+class EvalCfg:
+  """Configuration for periodic evaluation on a separate medium-perturbation env."""
+
+  enabled: bool = True
+  """Whether to run evaluation during training."""
+  eval_every_n_iters: int = 100
+  """Run evaluation every N PPO iterations."""
+  eval_num_episodes: int = 1000
+  """Number of episodes to average over per evaluation."""
+  eval_num_envs: int = 1000
+  """Number of parallel envs in the eval simulator."""
+
+
+@dataclass
+class RslRlOnPolicyRunnerCfgWithEval(RslRlOnPolicyRunnerCfg):
+  """Runner cfg extended with an evaluation block."""
+
+  eval: EvalCfg = field(default_factory=EvalCfg)
+
+
 def unitree_g1_23dof_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """Create RL runner configuration for Unitree G1-23DOF velocity task."""
-  return RslRlOnPolicyRunnerCfg(
+  return RslRlOnPolicyRunnerCfgWithEval(
     obs_groups={
       "actor": ("actor",),
       "critic": ("critic",),

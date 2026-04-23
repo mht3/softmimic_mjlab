@@ -11,7 +11,7 @@ from mjlab.rl.exporter_utils import (
   attach_metadata_to_onnx,
   get_base_metadata,
 )
-from mjlab.rl.runner import MjlabOnPolicyRunner
+from src.utils.mjlab_on_policy_runner_with_eval import MjlabOnPolicyRunnerWithEval
 from mjlab.tasks.tracking.mdp import MotionCommand
 
 
@@ -44,7 +44,7 @@ class _OnnxMotionModel(nn.Module):
     )
 
 
-class MotionTrackingOnPolicyRunner(MjlabOnPolicyRunner):
+class MotionTrackingOnPolicyRunner(MjlabOnPolicyRunnerWithEval):
   env: RslRlVecEnvWrapper
 
   def __init__(
@@ -54,8 +54,9 @@ class MotionTrackingOnPolicyRunner(MjlabOnPolicyRunner):
     log_dir: str | None = None,
     device: str = "cpu",
     registry_name: str | None = None,
+    eval_env: VecEnv | None = None,
   ):
-    super().__init__(env, train_cfg, log_dir, device)
+    super().__init__(env, train_cfg, log_dir, device, eval_env=eval_env)
     self.registry_name = registry_name
 
   def export_motion_policy_to_onnx(

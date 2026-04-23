@@ -17,17 +17,40 @@ from rsl_rl.utils import check_nan, resolve_callable
 from rsl_rl.utils.logger import Logger
 
 
+def _episode_reward_extra_snapshot(extras: dict) -> dict:
+    """Extract mjlab ``Episode_Reward/*`` keys (same merge as ``Logger.process_env_step``).
+
+    Values are ``episodic_sum / max_episode_length_s`` per term from
+    ``mjlab.managers.reward_manager.RewardManager.reset``.
+    """
+    merged: dict = {}
+    if "episode" in extras:
+        merged.update(extras["episode"])
+    if "log" in extras:
+        merged.update(extras["log"])
+    return {k: v for k, v in merged.items() if k.startswith("Episode_Reward/")}
+
+
 class OnPolicyRunner:
     """On-policy runner for reinforcement learning algorithms."""
 
     alg: PPO
     """The actor-critic algorithm."""
 
-    def __init__(self, env: VecEnv, train_cfg: dict, log_dir: str | None = None, device: str = "cpu") -> None:
+    def __init__(
+        self,
+        env: VecEnv,
+        train_cfg: dict,
+        log_dir: str | None = None,
+        device: str = "cpu",
+        eval_env: VecEnv | None = None,
+    ) -> None:
         """Construct the runner, algorithm, and logging stack."""
         self.env = env
         self.cfg = train_cfg
         self.device = device
+        self.eval_env = eval_env
+        self._eval_cfg = train_cfg.get("eval", {}) or {}
 
         # Setup multi-GPU training if enabled
         self._configure_multi_gpu()
@@ -41,6 +64,12 @@ class OnPolicyRunner:
 
         # Visitation critic is owned by PPO.
         self.visitation_critic = self.alg.visitation_critic
+        if self.visitation_critic is not None and self.eval_env is None:
+            raise ValueError(
+                "Visitation critic requires a separate eval_env: enable eval in the agent "
+                "config and construct OnPolicyRunner(..., eval_env=...). Dataset collection "
+                "runs only on eval_env so PPO rollout and logger episode buffers are not reset."
+            )
 
         # Create the logger
         self.logger = Logger(
@@ -81,31 +110,16 @@ class OnPolicyRunner:
         total_it = start_it + num_learning_iterations
         for it in range(start_it, total_it):
             start = time.time()
-            # Before PPO rollout: pause and collect a deterministic trajectory buffer
-            # for the visitation critic if this iteration is a VC training step.
+            # Before PPO rollout: collect VC trajectories on eval_env only (required at init).
             # Rollout
             with torch.inference_mode():
                 if self.visitation_critic is not None and self.visitation_critic.should_collect(it):
                     collect_start = time.time()
-                    n_collected = self.visitation_critic.collect_trajectories(self.env, self.alg.actor)
+                    n_collected = self.visitation_critic.collect_trajectories(self.eval_env, self.alg.actor)
                     print(
-                        f"[VC] Collected {n_collected} deterministic trajectories "
+                        f"[VC] Collected {n_collected} deterministic trajectories on eval env "
                         f"in {time.time() - collect_start:.1f}s (iter {it})."
                     )
-                    # Start PPO rollout from a clean reset distribution after collection.
-                    obs, extras = self.env.reset()
-                    obs = obs.to(self.device)
-                    # De-synchronize episode lengths to avoid wave-like completion spikes in logs.
-                    self.env.episode_length_buf = torch.randint_like(
-                        self.env.episode_length_buf, high=int(self.env.max_episode_length)
-                    )
-                    # Clear stale extras from the full reset so the first PPO step
-                    # doesn't log inflated VC-collection episode rewards.
-                    if "log" in extras:
-                        extras["log"].clear()
-                    if "episode" in extras:
-                        extras["episode"].clear()
-                    self.logger.reset_running_episode_stats()
                 for _ in range(self.cfg["num_steps_per_env"]):
                     # Sample actions
                     actions = self.alg.act(obs)
@@ -118,6 +132,16 @@ class OnPolicyRunner:
                     obs, rewards, dones = (obs.to(self.device), rewards.to(self.device), dones.to(self.device))
                     # Process the step
                     self.alg.process_env_step(obs, rewards, dones, extras)
+                    # Track per-bin rollout outcomes during PPO collection (reward_bins mode).
+                    # Read logger accumulators before process_env_step zeros them.
+                    # Add the current step's reward/length since they haven't been
+                    # folded in yet (process_env_step does that below).
+                    if self.visitation_critic is not None and dones.any():
+                        done_mask = dones > 0
+                        self.visitation_critic.record_episode_outcomes(
+                            self.logger.cur_reward_sum[done_mask] + rewards[done_mask],
+                            self.logger.cur_episode_length[done_mask] + 1,
+                        )
                     # Override reset states with VC-generated states for envs that just terminated.
                     if self.visitation_critic is not None and self.visitation_critic.is_trained and dones.any():
                         done_env_ids = torch.where(dones > 0)[0]
@@ -125,6 +149,12 @@ class OnPolicyRunner:
                         target_abs_qpos = self.env.set_reset_states(done_env_ids, reset_states)
                         # Re-fetch observations so the actor sees the VC-generated state.
                         obs = self.env.get_observations().to(self.device)
+                        # Re-update obs/critic normalizers on the corrected post-override obs.
+                        # process_env_step already updated them on the auto-reset obs, which
+                        # differs from what the actor actually sees next — this second call
+                        # ensures normalizer statistics track the true input distribution.
+                        self.alg.actor.update_normalization(obs)
+                        self.alg.critic.update_normalization(obs)
                         # Absolute qpos error: target written vs simulator robot state (same layout as dataset).
                         if target_abs_qpos is not None:
                             env_u = self.env.unwrapped
@@ -154,6 +184,8 @@ class OnPolicyRunner:
 
             # Update policy
             loss_dict = self.alg.update(iteration=it)
+            if self.visitation_critic is not None:
+                loss_dict.update(self.visitation_critic.rollout_bin_fracs())
 
             stop = time.time()
             learn_time = stop - start
@@ -173,6 +205,10 @@ class OnPolicyRunner:
                 wandb_media=getattr(self.alg, "vc_wandb_media", None),
             )
 
+            # Periodic evaluation on a separate medium-perturbation env.
+            if self._should_evaluate(it):
+                self._evaluate(it)
+
             # Save model
             if self.logger.writer is not None and it % self.cfg["save_interval"] == 0:
                 self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))  # type: ignore
@@ -181,6 +217,116 @@ class OnPolicyRunner:
         if self.logger.writer is not None:
             self.save(os.path.join(self.logger.log_dir, f"model_{self.current_learning_iteration}.pt"))  # type: ignore
             self.logger.stop_logging_writer()
+
+    # --- Evaluation on separate medium-perturbation env ---
+
+    def _should_evaluate(self, it: int) -> bool:
+        """True iff eval is configured and this iteration is an eval step."""
+        if self.eval_env is None:
+            return False
+        if not self._eval_cfg.get("enabled", False):
+            return False
+        every = int(self._eval_cfg.get("eval_every_n_iters", 100))
+        if every <= 0:
+            return False
+        return it % every == 0
+
+    @torch.inference_mode()
+    def _evaluate(self, it: int) -> None:
+        """Roll out the deterministic policy on ``self.eval_env`` until
+        ``eval_num_episodes`` complete, then log mean_reward and mean_episode_length.
+        """
+        num_episodes = int(self._eval_cfg.get("eval_num_episodes", 1000))
+        env = self.eval_env
+        actor = self.alg.actor
+        actor_was_training = actor.training
+        actor.eval()
+        is_recurrent = getattr(actor, "is_recurrent", False)
+
+        num_envs = env.num_envs
+        cur_reward = torch.zeros(num_envs, dtype=torch.float, device=self.device)
+        cur_length = torch.zeros(num_envs, dtype=torch.float, device=self.device)
+        completed_rewards: list[float] = []
+        completed_lengths: list[float] = []
+        eval_ep_reward_extras: list[dict] = []
+
+        obs, _extras_reset = env.reset()
+        obs = obs.to(self.device)
+        if is_recurrent:
+            actor.reset()  # clear hidden state across all envs at episode start
+        # Cap steps to avoid infinite loops if envs never terminate.
+        max_steps = int(env.max_episode_length) * (num_episodes // num_envs + 2)
+        steps = 0
+        while len(completed_rewards) < num_episodes and steps < max_steps:
+            actions = actor(obs, stochastic_output=False)
+            obs, rewards, dones, extras = env.step(actions.to(env.device))
+            snap = _episode_reward_extra_snapshot(extras)
+            if snap:
+                eval_ep_reward_extras.append(snap)
+            obs = obs.to(self.device)
+            rewards = rewards.to(self.device)
+            dones = dones.to(self.device)
+            cur_reward += rewards
+            cur_length += 1
+            if dones.any():
+                done_mask = dones > 0
+                done_ids = done_mask.nonzero(as_tuple=True)[0]
+                for i in done_ids.tolist():
+                    completed_rewards.append(cur_reward[i].item())
+                    completed_lengths.append(cur_length[i].item())
+                    if len(completed_rewards) >= num_episodes:
+                        break
+                cur_reward[done_mask] = 0.0
+                cur_length[done_mask] = 0.0
+                if is_recurrent:
+                    actor.reset(dones)  # zero hidden state for finished envs
+            steps += 1
+
+        if actor_was_training:
+            actor.train()
+
+        if not completed_rewards:
+            return
+        trimmed_rewards = completed_rewards[:num_episodes]
+        trimmed_lengths = completed_lengths[:num_episodes]
+        mean_reward = sum(trimmed_rewards) / len(trimmed_rewards)
+        mean_length = sum(trimmed_lengths) / len(trimmed_lengths)
+        if self.logger.writer is not None:
+            self.logger.writer.add_scalar("Evaluate/mean_reward", mean_reward, it)
+            self.logger.writer.add_scalar("Evaluate/mean_episode_length", mean_length, it)
+            self.logger.writer.add_scalar("Evaluate/num_episodes", len(trimmed_rewards), it)
+            self._log_eval_episode_reward_extras(eval_ep_reward_extras, it)
+
+    def _log_eval_episode_reward_extras(self, ep_extras: list[dict], it: int) -> None:
+        """Log ``Episode_Reward/*`` from eval the same way as train (mean over rollout snapshots).
+
+        mjlab defines each ``Episode_Reward/term`` as episodic sum (already × dt when
+        ``scale_rewards_by_dt``) divided by ``max_episode_length_s``. Training averages
+        all snapshots in ``ep_extras`` for the iteration; here we average over one
+        eval sweep's snapshots that carried reward-term keys.
+        """
+        if not ep_extras or self.logger.writer is None:
+            return
+        all_keys: set[str] = set()
+        for d in ep_extras:
+            all_keys.update(d.keys())
+        for key in sorted(all_keys):
+            infotensor = torch.tensor([], device=self.device)
+            for ep_info in ep_extras:
+                if key not in ep_info:
+                    continue
+                v = ep_info[key]
+                if not isinstance(v, torch.Tensor):
+                    v = torch.as_tensor(v, dtype=torch.float, device=self.device).reshape(1)
+                else:
+                    v = v.to(self.device)
+                    if v.ndim == 0:
+                        v = v.unsqueeze(0)
+                infotensor = torch.cat((infotensor, v))
+            if infotensor.numel() == 0:
+                continue
+            value = torch.mean(infotensor).item()
+            self.logger.writer.add_scalar(f"Evaluate/{key}", value, it)
 
     def save(self, path: str, infos: dict | None = None) -> None:
         """Save the models and training state to a given path and upload them if external logging is used."""

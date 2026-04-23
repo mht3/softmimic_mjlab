@@ -5,6 +5,7 @@ import os
 import shlex
 import shutil
 import sys
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,7 @@ from typing import Literal, cast
 import tyro
 
 from mjlab.envs import ManagerBasedRlEnv, ManagerBasedRlEnvCfg
-from mjlab.rl import MjlabOnPolicyRunner, RslRlBaseRunnerCfg
+from mjlab.rl import RslRlBaseRunnerCfg
 from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg, load_runner_cls
 from mjlab.tasks.tracking.mdp import MotionCommandCfg
 from mjlab.utils.gpu import select_gpus
@@ -21,6 +22,7 @@ from mjlab.utils.os import dump_yaml, get_checkpoint_path
 from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
 from src.utils.deploy_export import export_deploy_cfg
+from src.utils.mjlab_on_policy_runner_with_eval import MjlabOnPolicyRunnerWithEval
 from src.utils.vecenv_wrapper import RslRlVecEnvSpecialResetWrapper
 
 
@@ -153,9 +155,49 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
 
   runner_cls = load_runner_cls(task_id)
   if runner_cls is None:
-    runner_cls = MjlabOnPolicyRunner
+    runner_cls = MjlabOnPolicyRunnerWithEval
 
   runner_kwargs = {}
+  eval_cfg = agent_cfg.get("eval", {}) or {}
+  if eval_cfg.get("enabled", False):
+    eval_num_envs = int(eval_cfg.get("eval_num_envs", 1000))
+    eval_env_cfg = deepcopy(cfg.env)
+    eval_env_cfg.scene.num_envs = eval_num_envs
+    eval_env_cfg.seed = seed + 10_000
+
+    # Pin eval to a fixed medium difficulty: drop the training curriculum
+    # (which would never advance on the eval env) and hard-code the medium
+    # stage of push + init noise. Matches the Flat task definition.
+    eval_env_cfg.curriculum.pop("push_velocity", None)
+    eval_env_cfg.curriculum.pop("reset_noise", None)
+    if "push_robot" in (eval_env_cfg.events or {}):
+      eval_env_cfg.events["push_robot"].params["velocity_range"] = {
+        "x": (-1.25, 1.25), "y": (-1.25, 1.25), "z": (-0.2, 0.2),
+        "roll": (-1.18, 1.18), "pitch": (-1.18, 1.18), "yaw": (-1.18, 1.18),
+      }
+    if "reset_base" in (eval_env_cfg.events or {}):
+      rb = eval_env_cfg.events["reset_base"]
+      rb.params["velocity_range"] = {
+        "x": (-1.25, 1.25), "y": (-1.25, 1.25), "z": (-0.2, 0.2),
+        "roll": (-0.78, 0.78), "pitch": (-0.78, 0.78), "yaw": (-0.78, 0.78),
+      }
+      if "z" in rb.params.get("pose_range", {}):
+        rb.params["pose_range"]["z"] = (-0.01, 0.01)
+    if "reset_robot_joints" in (eval_env_cfg.events or {}):
+      eval_env_cfg.events["reset_robot_joints"].params["position_range"] = (-0.2, 0.2)
+    if "reset_rp_noise" in (eval_env_cfg.events or {}):
+      eval_env_cfg.events["reset_rp_noise"].params["rp_range"] = 0.3
+
+    print(
+      f"[INFO] Creating evaluation env with {eval_num_envs} envs "
+      "(env_cfg deep-copied from training; curriculum stripped and pinned to medium)."
+    )
+    eval_env_raw = ManagerBasedRlEnv(cfg=eval_env_cfg, device=device)
+    eval_env = RslRlVecEnvSpecialResetWrapper(eval_env_raw, clip_actions=cfg.agent.clip_actions)
+    runner_kwargs["eval_env"] = eval_env
+  else:
+    eval_env = None
+
   runner = runner_cls(env, agent_cfg, str(log_dir), device, **runner_kwargs)
 
   runner.add_git_repo_to_log(__file__)
@@ -176,6 +218,8 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
   )
 
   env.close()
+  if eval_env is not None:
+    eval_env.close()
 
 
 def launch_training(task_id: str, args: TrainConfig | None = None):

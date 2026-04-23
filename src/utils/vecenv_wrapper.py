@@ -77,6 +77,15 @@ class RslRlVecEnvSpecialResetWrapper(RslRlVecEnvWrapper):
         abs_qpos = integrate_qpos(ref_qpos, rel_qpos)
         abs_qvel = rel_qvel + ref_qvel
 
+        # Clip joint positions to the robot's soft joint limits so the CFM cannot
+        # generate physically infeasible configurations (which would immediately
+        # trigger termination or joint_pos_limits reward penalties).
+        if hasattr(robot.data, "soft_joint_pos_limits"):
+            limits = robot.data.soft_joint_pos_limits[env_ids]  # (K, n_joints, 2)
+            joint_lo = limits[:, :, 0]
+            joint_hi = limits[:, :, 1]
+            abs_qpos[:, 7:] = torch.clamp(abs_qpos[:, 7:], joint_lo, joint_hi)
+
         # Write absolute state into the simulator.
         root_pos_w = abs_qpos[:, :3] + env.scene.env_origins[env_ids]
         root_quat = abs_qpos[:, 3:7]

@@ -139,7 +139,7 @@ def _make_train_cfg_with_vc() -> dict:
 
 
 def _build_ppo_with_vc() -> tuple[PPO, TensorDict, VCTestDummyEnv]:
-    """Construct PPO + visitation critic via ``construct_algorithm`` (mirrors training path)."""
+    """Construct PPO + visitation critic via ``construct_algorithm``."""
     cfg = copy.deepcopy(_make_train_cfg_with_vc())
     env = VCTestDummyEnv(device="cpu")
     obs = env.get_observations()
@@ -148,7 +148,7 @@ def _build_ppo_with_vc() -> tuple[PPO, TensorDict, VCTestDummyEnv]:
 
 
 def _seed_vc_buffer(ppo: PPO, num_traj: int = 16, state_dim: int = REL_STATE_DIM) -> None:
-    """Populate VC trajectory lists with synthetic data (public buffer fields used at runtime)."""
+    """Populate trajectory lists with synthetic data."""
     vc = ppo.visitation_critic
     assert vc is not None
     buf = vc.buffer
@@ -191,6 +191,7 @@ class TestVisitationCriticLabeling:
             "num_warmup_iterations": 0,
             "num_train_steps": 1,
             "batch_size": 4,
+            "max_episode_length": 50,
         }
         vc = VisitationCritic(
             vc_cfg,
@@ -198,19 +199,23 @@ class TestVisitationCriticLabeling:
             obs_groups={"relative_state": ["relative_state"]},
             device="cpu",
         )
+        # Good (1) requires end-state norm < radius AND length == max_episode_length.
+        # Rows: (near radius, complete), (inside, complete), (inside, incomplete), (inside, complete).
         data = {
-            "start_states": torch.zeros(3, 4),
+            "start_states": torch.zeros(4, 4),
             "end_states": torch.tensor(
                 [
-                    [3.0, 0.0, 0.0, 0.0],
-                    [0.5, 0.0, 0.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.0],
+                    [3.0, 0.0, 0.0, 0.0],  # norm > radius -> bad regardless
+                    [0.5, 0.0, 0.0, 0.0],  # inside + complete -> good
+                    [0.5, 0.0, 0.0, 0.0],  # inside + incomplete -> bad
+                    [0.0, 0.0, 0.0, 0.0],  # inside + complete -> good
                 ]
             ),
-            "cumulative_rewards": torch.zeros(3),
+            "cumulative_rewards": torch.zeros(4),
+            "trajectory_lengths": torch.tensor([50, 50, 10, 50]),
         }
         _starts, labels = vc._label_trajectories(data)
-        assert labels.tolist() == [0, 1, 1]
+        assert labels.tolist() == [0, 1, 0, 1]
 
 
 class TestVisitationCriticSchedule:
@@ -225,6 +230,7 @@ class TestVisitationCriticSchedule:
             "num_warmup_iterations": 10,
             "num_train_steps": 1,
             "batch_size": 4,
+            "max_episode_length": 50,
         }
         vc = VisitationCritic(
             vc_cfg,
@@ -267,6 +273,41 @@ class TestPPOWithVisitationCritic:
         assert "visitation_critic/cfm_loss" in loss_dict
         assert ppo.visitation_critic is not None
         assert ppo.visitation_critic.is_trained
+
+
+class TestOnPolicyRunnerRequiresEvalEnvWithVisitationCritic:
+    """OnPolicyRunner must receive eval_env when VC is enabled."""
+
+    def test_raises_when_vc_enabled_without_eval_env(self) -> None:
+        from rsl_rl.runners import OnPolicyRunner
+
+        cfg = {
+            "num_steps_per_env": NUM_STEPS,
+            "save_interval": 100,
+            "obs_groups": {
+                "actor": ["policy", "relative_state"],
+                "critic": ["policy", "relative_state"],
+                "relative_state": ["relative_state"],
+            },
+            "algorithm": _vc_algorithm_cfg(),
+            "actor": {
+                "class_name": "MLPModel",
+                "hidden_dims": [32, 32],
+                "activation": "elu",
+                "distribution_cfg": {
+                    "class_name": "GaussianDistribution",
+                    "init_std": 1.0,
+                    "std_type": "scalar",
+                },
+            },
+            "critic": {
+                "class_name": "MLPModel",
+                "hidden_dims": [32, 32],
+                "activation": "elu",
+            },
+        }
+        with pytest.raises(ValueError, match="eval_env"):
+            OnPolicyRunner(VCTestDummyEnv(), cfg, log_dir=None, device="cpu")
 
 
 class TestResolveVisitationCriticConfig:

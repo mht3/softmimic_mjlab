@@ -26,11 +26,12 @@ from tqdm import tqdm
 
 import mjlab
 from mjlab.envs import ManagerBasedRlEnv
-from mjlab.rl import MjlabOnPolicyRunner, RslRlVecEnvWrapper
+from src.utils.vecenv_wrapper import RslRlVecEnvSpecialResetWrapper as RslRlVecEnvWrapper
 from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg, load_runner_cls
 from mjlab.tasks.tracking.mdp import MotionCommand, MotionCommandCfg
 from mjlab.utils.lab_api.math import quat_apply, quat_from_euler_xyz, quat_mul
 from mjlab.utils.torch import configure_torch_backends
+from src.utils.mjlab_on_policy_runner_with_eval import MjlabOnPolicyRunnerWithEval
 
 
 # ---------------------------------------------------------------------------
@@ -56,12 +57,21 @@ class PerturbSpec:
   init_pos_z_range: float = 0.0
   init_rp_range: float = 0.0
   push_velocity_range: dict = field(default_factory=dict)  # empty = no push
-  push_interval_range_s: tuple[float, float] = (2.0, 5.0)
+  # Ring sampling: when True, magnitudes are drawn from N(r, sigma^2) with a
+  # random sign, concentrating mass near ±r. Sigmas are fixed across levels so
+  # the ring width is the same regardless of the ring radius.
+  ring: bool = False
+  ring_lin_vel_sigma: float = 0.10   # [m/s]  — lin vel init & interval
+  ring_ang_vel_sigma: float = 0.10   # [rad/s] — ang vel interval
+  ring_joint_sigma: float = 0.02     # [rad]   — joint init noise
+  ring_rp_sigma: float = 0.02        # [rad]   — roll/pitch init noise
 
 
 _LIN, _Z, _ANG = 0.5, 0.2, 0.78
 
 PERTURB_LEVELS: dict[str, PerturbSpec] = {
+  # "none" is kept for opt-in use (pass --levels explicitly) but excluded from
+  # the default sweep because zero perturbation is uninformative.
   "none": PerturbSpec(),
   "small": PerturbSpec(
     init_joint_range=0.1, init_lin_vel_range=_LIN, init_z_vel_range=_Z,
@@ -79,15 +89,102 @@ PERTURB_LEVELS: dict[str, PerturbSpec] = {
       "roll": (-1.18, 1.18), "pitch": (-1.18, 1.18), "yaw": (-1.18, 1.18),
     },
   ),
-  "hard": PerturbSpec(
-    init_joint_range=0.4, init_lin_vel_range=2.0, init_z_vel_range=_Z,
-    init_ang_vel_range=_ANG, init_pos_z_range=0.01, init_rp_range=0.4,
+  # Ring variants: same magnitudes as uniform counterparts but sampled from a
+  # boundary-biased Gaussian ring so the robot starts near the failure surface.
+  "medium_ring": PerturbSpec(
+    init_joint_range=0.2, init_lin_vel_range=1.25, init_z_vel_range=_Z,
+    init_ang_vel_range=_ANG, init_pos_z_range=0.01, init_rp_range=0.3,
     push_velocity_range={
-      "x": (-2.0, 2.0), "y": (-2.0, 2.0), "z": (-_Z, _Z),
+      "x": (-1.25, 1.25), "y": (-1.25, 1.25), "z": (-_Z, _Z),
       "roll": (-1.18, 1.18), "pitch": (-1.18, 1.18), "yaw": (-1.18, 1.18),
     },
+    ring=True,
+  ),
+  "hard_ring": PerturbSpec(
+    init_joint_range=0.3, init_lin_vel_range=1.8, init_z_vel_range=_Z,
+    init_ang_vel_range=_ANG, init_pos_z_range=0.01, init_rp_range=0.3,
+    push_velocity_range={
+      "x": (-1.8, 1.8), "y": (-1.8, 1.8), "z": (-_Z, _Z),
+      "roll": (-1.18, 1.18), "pitch": (-1.18, 1.18), "yaw": (-1.18, 1.18),
+    },
+    ring=True,
   ),
 }
+
+# Levels used when --levels isn't passed. Excludes "none" (trivial).
+_DEFAULT_LEVELS = ("small", "medium", "medium_ring", "hard_ring")
+
+
+def _sample_ring(
+  size: tuple[int, ...], r: float, std: float, device: torch.device,
+) -> torch.Tensor:
+  """Signed-Gaussian ring sampling for a scalar range (-r, r).
+
+  Draws sign uniformly from {-1, +1} and magnitude from N(r, std^2), clamping
+  magnitudes to >= 0. Fixed std means the ring width is the same across levels.
+  """
+  sign = (torch.randint(0, 2, size, device=device).float() * 2.0 - 1.0)
+  mag = torch.normal(mean=r, std=std, size=size, device=device).abs()
+  return sign * mag
+
+
+def _sample_range(
+  size: tuple[int, ...], lo: float, hi: float, ring: bool, std: float,
+  device: torch.device,
+) -> torch.Tensor:
+  """Sample from (lo, hi): uniform when ring=False, ring-Gaussian when ring=True.
+
+  Ring mode assumes a symmetric range and uses r = (hi - lo) / 2.
+  """
+  if ring:
+    r = 0.5 * (hi - lo)
+    return _sample_ring(size, r, std, device)
+  return torch.empty(size, device=device).uniform_(lo, hi)
+
+
+def make_ring_push_fn(
+  lin_vel_sigma: float, ang_vel_sigma: float, time_cutoff_s: float = 17.0
+):
+  """Build a push event function that samples pushes from a Gaussian ring.
+
+  Drop-in replacement for ``push_by_setting_velocity_with_cutoff`` that biases
+  push samples toward the boundary of the per-axis range. Linear velocity axes
+  (x, y, z) use ``lin_vel_sigma``; angular axes (roll, pitch, yaw) use
+  ``ang_vel_sigma``. Sigmas are fixed so ring width is constant across levels.
+  """
+  from mjlab.managers.scene_entity_config import SceneEntityCfg
+
+  _DEFAULT_CFG = SceneEntityCfg("robot")
+  _SIGMA = {
+    "x": lin_vel_sigma, "y": lin_vel_sigma, "z": lin_vel_sigma,
+    "roll": ang_vel_sigma, "pitch": ang_vel_sigma, "yaw": ang_vel_sigma,
+  }
+
+  def ring_push(
+    env,
+    env_ids,
+    velocity_range: dict,
+    time_cutoff_s: float = time_cutoff_s,
+    asset_cfg: SceneEntityCfg = _DEFAULT_CFG,
+  ) -> None:
+    cutoff_step = int(time_cutoff_s / env.step_dt)
+    mask = env.episode_length_buf[env_ids] < cutoff_step
+    if not bool(mask.any()):
+      return
+    active_ids = env_ids[mask]
+    asset = env.scene[asset_cfg.name]
+    vel_w = asset.data.root_link_vel_w[active_ids]  # (K, 6)
+    device = env.device
+    delta = torch.zeros_like(vel_w)
+    for i, key in enumerate(("x", "y", "z", "roll", "pitch", "yaw")):
+      lo, hi = velocity_range.get(key, (0.0, 0.0))
+      r = 0.5 * (hi - lo)
+      if r <= 0.0:
+        continue
+      delta[:, i] = _sample_ring((vel_w.shape[0],), r, _SIGMA[key], device)
+    asset.write_root_link_velocity_to_sim(vel_w + delta, env_ids=active_ids)
+
+  return ring_push
 
 TRAJ_LABELS = [
   "\u0394x (m)", "\u0394y (m)", "\u0394z (m)",
@@ -130,19 +227,28 @@ def _apply_init_noise_balance(
   init_ang_vel_range: float,
   init_pos_z_range: float,
   init_rp_range: float,
+  ring: bool = False,
+  ring_lin_vel_sigma: float = 0.10,
+  ring_ang_vel_sigma: float = 0.10,
+  ring_joint_sigma: float = 0.02,
+  ring_rp_sigma: float = 0.02,
 ) -> None:
-  """Apply uniform init noise to joint positions and base velocity for one env.
+  """Apply init noise to joint positions and base velocity for one env.
 
   After a balance reset the robot is at rest, so we add noise around that state.
   Velocities are read in body frame, noised, then transformed to world frame
   before writing (write_root_state_to_sim expects world-frame velocities).
+
+  When ``ring=True`` each scalar range (-r, r) is sampled from a signed Gaussian
+  concentrated near the boundary — biases eval toward failure-prone states.
+  Sigmas are fixed so ring width is constant regardless of the ring radius.
   """
   env_ids = torch.tensor([env_id], device=device)
 
   if init_joint_range > 0.0:
     n_j = robot.data.joint_pos.shape[1]
-    noise_j = torch.empty(1, n_j, device=device).uniform_(
-      -init_joint_range, init_joint_range
+    noise_j = _sample_range(
+      (1, n_j), -init_joint_range, init_joint_range, ring, ring_joint_sigma, device,
     )
     noisy_jpos = robot.data.joint_pos[env_ids] + noise_j
     if hasattr(robot.data, "soft_joint_pos_limits"):
@@ -161,29 +267,33 @@ def _apply_init_noise_balance(
     quat = robot.data.root_link_quat_w[env_ids].clone()
 
     if init_pos_z_range > 0.0:
-      pos[:, 2:3] += torch.empty(1, 1, device=device).uniform_(
-        -init_pos_z_range, init_pos_z_range
+      pos[:, 2:3] += _sample_range(
+        (1, 1), -init_pos_z_range, init_pos_z_range, ring, ring_lin_vel_sigma, device,
       )
     if init_rp_range > 0.0:
-      roll  = torch.empty(1, device=device).uniform_(-init_rp_range, init_rp_range)
-      pitch = torch.empty(1, device=device).uniform_(-init_rp_range, init_rp_range)
+      roll = _sample_range(
+        (1,), -init_rp_range, init_rp_range, ring, ring_rp_sigma, device,
+      )
+      pitch = _sample_range(
+        (1,), -init_rp_range, init_rp_range, ring, ring_rp_sigma, device,
+      )
       delta = quat_from_euler_xyz(roll, pitch, torch.zeros(1, device=device))
-      quat  = quat_mul(delta, quat)
+      quat = quat_mul(delta, quat)
 
     lin_vel_b = robot.data.root_link_lin_vel_b[env_ids].clone()
     ang_vel_b = robot.data.root_link_ang_vel_b[env_ids].clone()
 
     if init_lin_vel_range > 0.0:
-      lin_vel_b[:, :2] += torch.empty(1, 2, device=device).uniform_(
-        -init_lin_vel_range, init_lin_vel_range
+      lin_vel_b[:, :2] += _sample_range(
+        (1, 2), -init_lin_vel_range, init_lin_vel_range, ring, ring_lin_vel_sigma, device,
       )
     if init_z_vel_range > 0.0:
-      lin_vel_b[:, 2:3] += torch.empty(1, 1, device=device).uniform_(
-        -init_z_vel_range, init_z_vel_range
+      lin_vel_b[:, 2:3] += _sample_range(
+        (1, 1), -init_z_vel_range, init_z_vel_range, ring, ring_lin_vel_sigma, device,
       )
     if init_ang_vel_range > 0.0:
-      ang_vel_b += torch.empty(1, 3, device=device).uniform_(
-        -init_ang_vel_range, init_ang_vel_range
+      ang_vel_b += _sample_range(
+        (1, 3), -init_ang_vel_range, init_ang_vel_range, ring, ring_ang_vel_sigma, device,
       )
 
     lin_vel_w = quat_apply(quat, lin_vel_b)
@@ -407,6 +517,11 @@ def rollout(
           perturb_spec.init_joint_range, perturb_spec.init_lin_vel_range,
           perturb_spec.init_z_vel_range, perturb_spec.init_ang_vel_range,
           perturb_spec.init_pos_z_range, perturb_spec.init_rp_range,
+          ring=perturb_spec.ring,
+          ring_lin_vel_sigma=perturb_spec.ring_lin_vel_sigma,
+          ring_ang_vel_sigma=perturb_spec.ring_ang_vel_sigma,
+          ring_joint_sigma=perturb_spec.ring_joint_sigma,
+          ring_rp_sigma=perturb_spec.ring_rp_sigma,
         )
 
   pbar.close()
@@ -532,6 +647,11 @@ def collect_trajectories(
           perturb_spec.init_joint_range, perturb_spec.init_lin_vel_range,
           perturb_spec.init_z_vel_range, perturb_spec.init_ang_vel_range,
           perturb_spec.init_pos_z_range, perturb_spec.init_rp_range,
+          ring=perturb_spec.ring,
+          ring_lin_vel_sigma=perturb_spec.ring_lin_vel_sigma,
+          ring_ang_vel_sigma=perturb_spec.ring_ang_vel_sigma,
+          ring_joint_sigma=perturb_spec.ring_joint_sigma,
+          ring_rp_sigma=perturb_spec.ring_rp_sigma,
         )
 
   return trajectories
@@ -675,9 +795,10 @@ def main():
                       help="Episodes per (policy, perturbation) condition.")
   parser.add_argument("--num-envs", type=int, default=64)
   parser.add_argument(
-    "--levels", nargs="+", default=list(PERTURB_LEVELS),
+    "--levels", nargs="+", default=list(_DEFAULT_LEVELS),
     choices=list(PERTURB_LEVELS),
-    help="Perturbation levels to evaluate. Default: all 4 levels.",
+    help=f"Perturbation levels to evaluate. Default: {list(_DEFAULT_LEVELS)}. "
+         f"Pass 'none' explicitly to include the zero-perturbation baseline.",
   )
   parser.add_argument("--motion-file", type=str, default=None,
                       help="NPZ motion file (required for tracking tasks).")
@@ -756,7 +877,7 @@ def main():
     motion_cmd = env.command_manager.get_term("motion")
 
   # --- Evaluate each policy ---
-  runner_cls = load_runner_cls(args.task) or MjlabOnPolicyRunner
+  runner_cls = load_runner_cls(args.task) or MjlabOnPolicyRunnerWithEval
   runner = runner_cls(env_wrapped, asdict(agent_cfg), device=device)
 
   all_results: dict[str, dict[str, dict]] = {}
@@ -786,13 +907,21 @@ def main():
       # Update push_robot event velocity range for this level.
       if has_push:
         push_cfg = env_wrapped.unwrapped.event_manager.get_term_cfg("push_robot")
+        # Cache the original push func once so non-ring levels can restore it.
+        if not hasattr(push_cfg, "_original_func_cache"):
+          push_cfg._original_func_cache = push_cfg.func
         if spec.push_velocity_range:
           push_cfg.params["velocity_range"] = copy.deepcopy(spec.push_velocity_range)
-          push_cfg.interval_range_s = spec.push_interval_range_s
+          push_cfg.interval_range_s = (2.0, 5.0)
+          if spec.ring:
+            push_cfg.func = make_ring_push_fn(spec.ring_lin_vel_sigma, spec.ring_ang_vel_sigma)
+          else:
+            push_cfg.func = push_cfg._original_func_cache
         else:
           push_cfg.params["velocity_range"] = {
             k: (0.0, 0.0) for k in ("x", "y", "z", "roll", "pitch", "yaw")
           }
+          push_cfg.func = push_cfg._original_func_cache
 
       # For tracking tasks, update MotionCommandCfg init noise.
       if is_tracking:
