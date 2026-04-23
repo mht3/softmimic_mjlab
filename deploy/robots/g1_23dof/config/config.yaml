@@ -15,9 +15,9 @@ FSM:
     #   id: 5
     #   type: Mimic
 
-    Mimic_Swallow_Balance:
-      id: 6
-      type: Mimic
+    # Mimic_Swallow_Balance:
+    #   id: 6
+    #   type: Mimic
 
   Passive:
     transitions: 
@@ -69,8 +69,8 @@ FSM:
     transitions:
       Passive: LT + B.on_pressed
       Static_Balance: RT + B.on_pressed
-      Mimic_Dance1_subject2: RB + A.on_pressed
-      Mimic_Swallow_Balance: RB + B.on_pressed
+      # Mimic_Dance1_subject2: RB + A.on_pressed
+      # Mimic_Swallow_Balance: RB + B.on_pressed
     limit_angle: 1.0  # radians (~57 deg); triggers passive on fall
     policy_dir: config/policy/velocity
 
@@ -85,21 +85,21 @@ FSM:
   #   time_start: 0.0
   #   time_end: 500.0
     
-  Mimic_Swallow_Balance:
-    transitions:
-      Passive: LT + B.on_pressed
-      Velocity: RT + A.on_pressed
-      Static_Balance: RT + B.on_pressed
-    limit_angle: 1.22
-    motion_file: config/policy/mimic/swallow_balance/params/swallow_balance_23dof.npz
-    policy_dir: config/policy/mimic/swallow_balance/v1
-    time_start: 0.0
-    time_end: 500.0
+  # Mimic_Swallow_Balance:
+  #   transitions:
+  #     Passive: LT + B.on_pressed
+  #     Velocity: RT + A.on_pressed
+  #     Static_Balance: RT + B.on_pressed
+  #   limit_angle: 1.22
+  #   motion_file: config/policy/mimic/swallow_balance/params/swallow_balance_23dof.npz
+  #   policy_dir: config/policy/mimic/swallow_balance/v1
+  #   time_start: 0.0
+  #   time_end: 500.0
 
   Static_Balance:
     transitions:
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
-      Mimic_Dance1_subject2: RB + A.on_pressed
-      Mimic_Swallow_Balance: RB + B.on_pressed# radians (~57 deg); triggers passive on fall
-    policy_dir: config/policy/static_balance/v0
+      # Mimic_Dance1_subject2: RB + A.on_pressed
+      # Mimic_Swallow_Balance: RB + B.on_pressed# radians
+    policy_dir: config/policy/static_balance/v1_baseline # v2_visitation_critic_l3_ball, or v3_visitation_critic_rew_bin
