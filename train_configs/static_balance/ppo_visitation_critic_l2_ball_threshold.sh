@@ -12,7 +12,7 @@ TASK="Unitree-G1-23Dof-Balance-Flat"
 NUM_ENVS=4096
 
 # --- Agent ---
-MAX_ITERATIONS=10001
+MAX_ITERATIONS=20001
 LEARNING_RATE=1e-3
 NUM_STEPS_PER_ENV=24
 
@@ -29,8 +29,8 @@ VC_CFG_DROPOUT_PROB=0.25
 VC_L2_RADIUS=4.0
 VC_HIDDEN_DIMS="(1024,1024,1024)"
 VC_CLASS_DIM=3
-VC_MAX_NUM_TRAINS=1  # -1 = unlimited; set to M to train at most M times
-VC_RESET_BIN_PROBS="(0.4,0.6)"  # (bad, good) — multinomial over discrete labels
+VC_MAX_NUM_TRAINS=3  # -1 = unlimited; set to M to train at most M times
+VC_RESET_BIN_PROBS="(0.8,0.2)"  # (bad, good) 
 
 # --- Evaluation ---
 EVAL_ENABLED=True

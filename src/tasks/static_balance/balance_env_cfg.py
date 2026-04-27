@@ -240,17 +240,17 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     "feet_in_contact": RewardTermCfg(
       func=mdp.feet_in_contact,
-      weight=0.5,
+      weight=0.3,
       params={"sensor_name": "feet_ground_contact"},
     ),
-    "is_alive": RewardTermCfg(func=mdp.is_alive, weight=1.5),
-    "is_terminated": RewardTermCfg(func=mdp.is_terminated, weight=-500.0),
+    "is_alive": RewardTermCfg(func=mdp.is_alive, weight=1.0),
+    "is_terminated": RewardTermCfg(func=mdp.is_terminated, weight=-300.0),
     "joint_acc_l2": RewardTermCfg(func=mdp.joint_acc_l2, weight=-2.5e-7),
     "joint_pos_limits": RewardTermCfg(func=mdp.joint_pos_limits, weight=-10.0),
     "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.01),
     "electrical_power": RewardTermCfg(
       func=mdp.electrical_power_cost,
-      weight=-1e-4,
+      weight=-1e-3,
       params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
     ),
   }
