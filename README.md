@@ -2,7 +2,9 @@
 
 
 ## Overview
-Adaptation [SoftMimic](https://github.com/Improbable-AI/softmimic) using Mjlab in place of IsaacLab. Currently supports compliant motion generation and learning for the Unitree G1 robot (both 29 and 23 dof).
+Custom implementation of [SoftMimic](https://github.com/Improbable-AI/softmimic) using mjlab in place of IsaacLab to make setup, training, and deployment simpler. Currently supports compliant motion generation and learning for the Unitree G1 robot (both 29 and 23 dof).
+
+Feel free to open a PR for any issues. I've tested real world deployment on the 23dof Unitree G1 only.
 
 
 <div align="center">
