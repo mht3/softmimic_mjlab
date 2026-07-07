@@ -2,9 +2,7 @@
 
 
 ## Overview
-Adaptation [SoftMimic](https://github.com/Improbable-AI/softmimic) using Mjlab in place of IsaacLab. This is a reinforcement learning project built upon the
-[mjlab](https://github.com/mujocolab/mjlab.git), using MuJoCo as its 
-physics simulation backend, currently supporting Unitree G1 robot (both 29 and 23 dof).
+Adaptation [SoftMimic](https://github.com/Improbable-AI/softmimic) using Mjlab in place of IsaacLab. Currently supports compliant motion generation and learning for the Unitree G1 robot (both 29 and 23 dof).
 
 
 <div align="center">
