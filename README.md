@@ -4,7 +4,7 @@
 ## Overview
 Custom implementation of [SoftMimic](https://github.com/Improbable-AI/softmimic) using mjlab in place of IsaacLab to make setup, training, and deployment simpler. Currently supports compliant motion generation and learning for the Unitree G1 robot (both 29 and 23 dof).
 
-Feel free to open a PR for any issues. I've tested real world deployment on the 23dof Unitree G1 only.
+Feel free to open a PR for any issues. Trained using CUDA 12.9 and Warp 1.12.0 on an NVIDIA RTX 5090 GPU. Real world deployment has been tested on the Unitree G1 23dof only.
 
 
 <div align="center">
