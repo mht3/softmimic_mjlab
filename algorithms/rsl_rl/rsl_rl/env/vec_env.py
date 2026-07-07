@@ -74,7 +74,6 @@ class VecEnv(ABC):
             - "student": Specified observation groups are used as input to the student model.
             - "teacher": Specified observation groups are used as input to the teacher model.
             - "rnd_state": Specified observation groups are used as input to the RND extension.
-            - "relative_state": Specified observation groups are used as input to the visitation critic extension.
 
             Incomplete or incorrect configurations are handled in the `resolve_obs_groups()` function in
             `rsl_rl/utils/utils.py`, which provides detailed information on the expected configuration.
@@ -90,40 +89,5 @@ class VecEnv(ABC):
             - "log" (dict[str, float | torch.Tensor]): Additional information for logging and debugging purposes.
                The key should be a string and start with "/" for namespacing. The value can be a scalar or a
                tensor. If it is a tensor, the mean of the tensor is used for logging.
-        """
-        raise NotImplementedError
-    
-    @abstractmethod
-    def set_reset_states(self, env_ids: torch.Tensor, states: torch.Tensor) -> torch.Tensor | None:
-        """Set custom initial states for specified environments on their next reset.
-
-        This is an optional method used by the visitation critic to override the default
-        reset behavior with CFM-generated states. Environments that do not support custom
-        resets can leave this as a no-op.
-
-        The ``states`` tensor is in **tangent-space** relative coordinates with dimension
-        ``2 * nv`` (e.g., 58D for a 30-DOF humanoid). The first ``nv`` entries are the output
-        of ``differentiate_qpos(qpos, qpos_ref)`` and the remaining ``nv`` entries are
-        ``qvel - qvel_ref``. The implementation is responsible for converting back to absolute
-        coordinates before writing into the simulator, e.g.::
-
-            from rsl_rl.utils.qpos import integrate_qpos
-
-            nv = model.nv  # e.g., 29 for humanoid
-            rel_qpos, rel_qvel = states[:, :nv], states[:, nv:]
-            abs_qpos = integrate_qpos(self.qpos_ref, rel_qpos)  # handles quaternion
-            abs_qvel = rel_qvel + self.qvel_ref
-            # write abs_qpos, abs_qvel into the simulator for env_ids
-
-        Args:
-            env_ids: Indices of environments to set reset states for. Shape: (num_resets,)
-            states: Tangent-space relative state tensors, shape (num_resets, 2 * nv).
-                Layout: [differentiate_qpos_result(nv), qvel_rel(nv)].
-
-        Returns:
-            If custom reset is implemented: absolute ``qpos`` tensor written (or intended),
-            shape ``(num_resets, 7 + n_joints)``: env-local root position, root quaternion
-            ``wxyz``, joint positions — same layout as ``collect_dataset.py`` ``state_qpos``.
-            Otherwise ``None``.
         """
         raise NotImplementedError

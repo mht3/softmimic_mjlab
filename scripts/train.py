@@ -165,32 +165,39 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     eval_env_cfg.scene.num_envs = eval_num_envs
     eval_env_cfg.seed = seed + 10_000
 
-    # Pin eval to a fixed medium difficulty: drop the training curriculum
-    # (which would never advance on the eval env) and hard-code the medium
-    # stage of push + init noise. Matches the Flat task definition.
-    eval_env_cfg.curriculum.pop("push_velocity", None)
-    eval_env_cfg.curriculum.pop("reset_noise", None)
-    if "push_robot" in (eval_env_cfg.events or {}):
-      eval_env_cfg.events["push_robot"].params["velocity_range"] = {
-        "x": (-1.25, 1.25), "y": (-1.25, 1.25), "z": (-0.2, 0.2),
-        "roll": (-1.18, 1.18), "pitch": (-1.18, 1.18), "yaw": (-1.18, 1.18),
-      }
-    if "reset_base" in (eval_env_cfg.events or {}):
-      rb = eval_env_cfg.events["reset_base"]
-      rb.params["velocity_range"] = {
-        "x": (-1.25, 1.25), "y": (-1.25, 1.25), "z": (-0.2, 0.2),
-        "roll": (-0.78, 0.78), "pitch": (-0.78, 0.78), "yaw": (-0.78, 0.78),
-      }
-      if "z" in rb.params.get("pose_range", {}):
-        rb.params["pose_range"]["z"] = (-0.01, 0.01)
-    if "reset_robot_joints" in (eval_env_cfg.events or {}):
-      eval_env_cfg.events["reset_robot_joints"].params["position_range"] = (-0.2, 0.2)
-    if "reset_rp_noise" in (eval_env_cfg.events or {}):
-      eval_env_cfg.events["reset_rp_noise"].params["rp_range"] = 0.3
+    if is_tracking_task:
+      eval_detail = (
+        "env_cfg deep-copied from training; tracking perturbations preserved; "
+        "no VC reset overrides are applied during eval"
+      )
+    else:
+      # Pin eval to a fixed medium difficulty: drop the training curriculum
+      # (which would never advance on the eval env) and hard-code the medium
+      # stage of push + init noise. Matches the Flat task definition.
+      eval_env_cfg.curriculum.pop("push_velocity", None)
+      eval_env_cfg.curriculum.pop("reset_noise", None)
+      if "push_robot" in (eval_env_cfg.events or {}):
+        eval_env_cfg.events["push_robot"].params["velocity_range"] = {
+          "x": (-1.25, 1.25), "y": (-1.25, 1.25), "z": (-0.2, 0.2),
+          "roll": (-1.18, 1.18), "pitch": (-1.18, 1.18), "yaw": (-1.18, 1.18),
+        }
+      if "reset_base" in (eval_env_cfg.events or {}):
+        rb = eval_env_cfg.events["reset_base"]
+        rb.params["velocity_range"] = {
+          "x": (-1.25, 1.25), "y": (-1.25, 1.25), "z": (-0.2, 0.2),
+          "roll": (-0.78, 0.78), "pitch": (-0.78, 0.78), "yaw": (-0.78, 0.78),
+        }
+        if "z" in rb.params.get("pose_range", {}):
+          rb.params["pose_range"]["z"] = (-0.01, 0.01)
+      if "reset_robot_joints" in (eval_env_cfg.events or {}):
+        eval_env_cfg.events["reset_robot_joints"].params["position_range"] = (-0.2, 0.2)
+      if "reset_rp_noise" in (eval_env_cfg.events or {}):
+        eval_env_cfg.events["reset_rp_noise"].params["rp_range"] = 0.3
+      eval_detail = "env_cfg deep-copied from training; curriculum stripped and pinned to medium"
 
     print(
       f"[INFO] Creating evaluation env with {eval_num_envs} envs "
-      "(env_cfg deep-copied from training; curriculum stripped and pinned to medium)."
+      f"({eval_detail})."
     )
     eval_env_raw = ManagerBasedRlEnv(cfg=eval_env_cfg, device=device)
     eval_env = RslRlVecEnvSpecialResetWrapper(eval_env_raw, clip_actions=cfg.agent.clip_actions)

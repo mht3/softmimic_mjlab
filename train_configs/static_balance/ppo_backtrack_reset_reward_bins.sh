@@ -1,40 +1,30 @@
 #!/bin/bash
-# Static balance training with visitation critic (CFM) enabled, using the
-# 4-bin reward_bins labeling (fail-low=0, fail-high=1, succeed-low=2, succeed-high=3).
-# Usage:
-#   bash train_configs/static_balance/ppo_visitation_critic_reward_bins.sh
-#   bash train_configs/static_balance/ppo_visitation_critic_reward_bins.sh --agent.run-name my_experiment
+# Static balance PPO with visitation-critic backtracking resets.
+# Bad reward_bins episodes (bins 0/1) seed a reset buffer at terminal_idx - 25 (~0.5s at dt=0.02).
 
 set -e
 
 TASK="Unitree-G1-23Dof-Balance-Flat"
 
-# --- Environment ---
 NUM_ENVS=4096
-
-# --- Agent ---
 MAX_ITERATIONS=20001
 LEARNING_RATE=1e-3
 NUM_STEPS_PER_ENV=24
 
-# --- Visitation Critic ---
-VC_TRAIN_EVERY_N_ITERS=5001
+# Backtrack reset harvesting runs live on PPO done events after this warmup.
 VC_NUM_WARMUP_ITERATIONS=5000
-VC_NUM_TRAIN_STEPS=50000
+VC_NUM_TRAIN_STEPS=1
 VC_LEARNING_RATE=5e-4
 VC_BATCH_SIZE=1024
 VC_MAX_TRAJECTORIES=10000
-VC_GUIDANCE_SCALE=3.0
-VC_NUM_EULER_STEPS=100
-VC_CFG_DROPOUT_PROB=0.25
-VC_HIDDEN_DIMS="(1024,1024,1024)"
-VC_CLASS_DIM=3
-VC_MAX_NUM_TRAINS=3  # -1 = unlimited; set to M to train at most M times
-VC_NUM_CLASSES=4     # 4 reward bins; null/CFG class = 4
-VC_RESET_BIN_PROBS="(0.3,0.5,0.15,0.05)"  # fail-low, fail-high, succeed-low, succeed-high
+VC_MAX_NUM_TRAINS=3
+VC_NUM_CLASSES=4
 VC_USE_RESET_STATES=True
+VC_RESET_STRATEGY=backtrack
+VC_BACKTRACK_STEPS=25
+VC_BACKTRACK_RESET_PROBABILITY=1.0
+VC_BACKTRACK_RESET_BUFFER_SIZE=100000
 
-# --- Evaluation ---
 EVAL_ENABLED=True
 EVAL_EVERY_N_ITERS=100
 EVAL_NUM_EPISODES=1000
@@ -50,20 +40,17 @@ python scripts/train.py "$TASK" \
   --agent.algorithm.visitation-critic-cfg.conditioning-type discrete \
   --agent.algorithm.visitation-critic-cfg.label-mode reward_bins \
   --agent.algorithm.visitation-critic-cfg.num-classes "$VC_NUM_CLASSES" \
-  --agent.algorithm.visitation-critic-cfg.train-every-n-iters "$VC_TRAIN_EVERY_N_ITERS" \
   --agent.algorithm.visitation-critic-cfg.num-warmup-iterations "$VC_NUM_WARMUP_ITERATIONS" \
   --agent.algorithm.visitation-critic-cfg.num-train-steps "$VC_NUM_TRAIN_STEPS" \
   --agent.algorithm.visitation-critic-cfg.learning-rate "$VC_LEARNING_RATE" \
   --agent.algorithm.visitation-critic-cfg.batch-size "$VC_BATCH_SIZE" \
   --agent.algorithm.visitation-critic-cfg.max-trajectories "$VC_MAX_TRAJECTORIES" \
-  --agent.algorithm.visitation-critic-cfg.guidance-scale "$VC_GUIDANCE_SCALE" \
-  --agent.algorithm.visitation-critic-cfg.num-euler-steps "$VC_NUM_EULER_STEPS" \
-  --agent.algorithm.visitation-critic-cfg.cfg-dropout-prob "$VC_CFG_DROPOUT_PROB" \
-  --agent.algorithm.visitation-critic-cfg.hidden-dims "$VC_HIDDEN_DIMS" \
-  --agent.algorithm.visitation-critic-cfg.class-dim "$VC_CLASS_DIM" \
   --agent.algorithm.visitation-critic-cfg.max-num-trains "$VC_MAX_NUM_TRAINS" \
-  --agent.algorithm.visitation-critic-cfg.reset-bin-probs "$VC_RESET_BIN_PROBS" \
   --agent.algorithm.visitation-critic-cfg.use-reset-states "$VC_USE_RESET_STATES" \
+  --agent.algorithm.visitation-critic-cfg.reset-strategy "$VC_RESET_STRATEGY" \
+  --agent.algorithm.visitation-critic-cfg.backtrack-steps "$VC_BACKTRACK_STEPS" \
+  --agent.algorithm.visitation-critic-cfg.backtrack-reset-probability "$VC_BACKTRACK_RESET_PROBABILITY" \
+  --agent.algorithm.visitation-critic-cfg.backtrack-reset-buffer-size "$VC_BACKTRACK_RESET_BUFFER_SIZE" \
   --agent.eval.enabled "$EVAL_ENABLED" \
   --agent.eval.eval-every-n-iters "$EVAL_EVERY_N_ITERS" \
   --agent.eval.eval-num-episodes "$EVAL_NUM_EPISODES" \

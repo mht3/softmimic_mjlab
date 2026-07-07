@@ -96,14 +96,15 @@ class PPO:
         # Visitation Critic components
         if visitation_critic_cfg:
             self.visitation_critic = VisitationCritic(
-                visitation_critic_cfg,
-                visitation_critic_cfg["state_dim"],
-                visitation_critic_cfg["obs_groups"],
-                self.device,
+                cfg=visitation_critic_cfg,
+                state_dim=visitation_critic_cfg["state_dim"],
+                act_dim=visitation_critic_cfg["act_dim"],
+                obs_groups=visitation_critic_cfg["obs_groups"],
+                num_envs=visitation_critic_cfg["num_envs"],
+                device=self.device,
             )
         else:
             self.visitation_critic = None
-        self.vc_wandb_media: dict = {}
 
         # Symmetry components
         if symmetry_cfg is not None:
@@ -168,6 +169,17 @@ class PPO:
         # Record observations before env.step()
         self.transition.observations = obs
         return self.transition.actions  # type: ignore
+
+    def blend_action_into_transition(self, blended_actions: torch.Tensor) -> None:
+        """Overwrite the in-flight transition's action and recompute its log_prob.
+
+        Called by the runner after the visitation critic has alpha-blended an
+        alternative action into the PPO sample. The actor's distribution was
+        already populated by the most recent ``act()`` call, so we re-evaluate
+        log_prob without a second forward pass through the actor MLP.
+        """
+        self.transition.actions = blended_actions.detach()
+        self.transition.actions_log_prob = self.actor.get_output_log_prob(blended_actions).detach()  # type: ignore
 
     def process_env_step(
         self, obs: TensorDict, rewards: torch.Tensor, dones: torch.Tensor, extras: dict[str, torch.Tensor]
@@ -432,12 +444,13 @@ class PPO:
             loss_dict["rnd"] = mean_rnd_loss
         if self.symmetry:
             loss_dict["symmetry"] = mean_symmetry_loss
-        if self.visitation_critic is not None and iteration is not None and self.visitation_critic.should_train(iteration):
+        if (
+            self.visitation_critic is not None
+            and iteration is not None
+            and self.visitation_critic.should_train(iteration)
+        ):
             vc_loss_dict = self.visitation_critic.train()
             loss_dict.update(vc_loss_dict)
-            self.vc_wandb_media = self.visitation_critic.wandb_media
-        else:
-            self.vc_wandb_media = {}
 
         return loss_dict
 
@@ -454,8 +467,8 @@ class PPO:
         self.critic.eval()
         if self.rnd:
             self.rnd.eval()
-        if self.visitation_critic:
-            self.visitation_critic.model.eval()
+        if self.visitation_critic is not None:
+            self.visitation_critic.flow.model.eval()
 
     def save(self) -> dict:
         """Return a dict of all models for saving."""
@@ -514,12 +527,11 @@ class PPO:
         rnd_enabled = "rnd_cfg" in cfg["algorithm"] and cfg["algorithm"]["rnd_cfg"] is not None
         if rnd_enabled:
             default_sets.append("rnd_state")
+        # Visitation critic reuses the actor obs group; no extra obs_group is required.
         vc_cfg = cfg["algorithm"].get("visitation_critic_cfg")
         vc_enabled = vc_cfg is not None and vc_cfg.get("enabled", False)
-        if vc_enabled:
-            default_sets.append("relative_state")
-        else:
-            cfg["obs_groups"].pop("relative_state", None)
+        # Drop any stale "relative_state" entry from older configs.
+        cfg["obs_groups"].pop("relative_state", None)
         if not rnd_enabled:
             cfg["obs_groups"].pop("rnd_state", None)
         cfg["obs_groups"] = resolve_obs_groups(obs, cfg["obs_groups"], default_sets)
@@ -529,9 +541,7 @@ class PPO:
 
         # Resolve visitation critic config if used
         if vc_enabled:
-            cfg["algorithm"]["visitation_critic_cfg"] = resolve_visitation_critic_config(
-                cfg["algorithm"]["visitation_critic_cfg"], obs, cfg["obs_groups"], env
-            )
+            resolve_visitation_critic_config(cfg["algorithm"], obs, cfg["obs_groups"], env)
         else:
             cfg["algorithm"]["visitation_critic_cfg"] = None
 

@@ -3,319 +3,263 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Tests for the Visitation Critic (CFM) extension and PPO integration."""
+"""Tests for the new state-action VisitationCritic (SB3 VCPPO port)."""
 
 from __future__ import annotations
-
-import copy
 
 import pytest
 import torch
 from tensordict import TensorDict
 
-from rsl_rl.algorithms.ppo import PPO
-from rsl_rl.env import VecEnv
-from rsl_rl.extensions import VisitationCritic
-from rsl_rl.extensions.visitation_critic import TrajectoryBuffer, resolve_visitation_critic_config
-from rsl_rl.models import MLPModel
-from rsl_rl.storage import RolloutStorage
-from tests.conftest import make_obs
-
-NUM_ENVS = 4
-NUM_STEPS = 8
-OBS_DIM = 8
-REL_STATE_DIM = 8
-NUM_ACTIONS = 4
+from rsl_rl.extensions.visitation_critic import (
+    AFlow,
+    SAFlow,
+    VisitationCritic,
+    _local_topmcq_mask,
+    resolve_alpha_schedule,
+)
 
 
-def _make_actor(obs: TensorDict, obs_groups: dict, num_actions: int = 4, **kwargs: object) -> MLPModel:
-    """Create an MLPModel actor with a Gaussian distribution."""
-    defaults: dict[str, object] = {
-        "hidden_dims": [32, 32],
-        "activation": "elu",
-        "distribution_cfg": {"class_name": "GaussianDistribution", "init_std": 1.0, "std_type": "scalar"},
-    }
-    defaults.update(kwargs)
-    return MLPModel(obs, obs_groups, "actor", num_actions, **defaults)
+STATE_DIM = 4
+ACT_DIM = 2
+NUM_ENVS = 3
+DEVICE = "cpu"
 
 
-def _make_critic(obs: TensorDict, obs_groups: dict, **kwargs: object) -> MLPModel:
-    """Create an MLPModel critic (no distribution)."""
-    defaults: dict[str, object] = {"hidden_dims": [32, 32], "activation": "elu"}
-    defaults.update(kwargs)
-    return MLPModel(obs, obs_groups, "critic", 1, **defaults)
+def _make_obs_td(state: torch.Tensor) -> TensorDict:
+    return TensorDict({"policy": state}, batch_size=[state.shape[0]])
 
 
-def _vc_algorithm_cfg() -> dict:
-    """Minimal visitation-critic subsection for tests (tiny CFM inner loop)."""
-    return {
-        "class_name": "PPO",
-        "num_learning_epochs": 1,
-        "num_mini_batches": 1,
-        "visitation_critic_cfg": {
-            "enabled": True,
-            "train_every_n_iters": 1,
-            "num_warmup_iterations": 0,
-            "num_train_steps": 2,
-            "warmup_steps": 1,
-            "batch_size": 8,
-            "learning_rate": 1e-3,
-            "label_mode": "l2_ball",
-            "l2_radius": 10.0,
-            "conditioning_type": "discrete",
-            "num_classes": 2,
-            "null_label": 2,
-            "hidden_dims": [16, 16],
-            "class_dim": 4,
-            "max_trajectories": 100,
-            "num_collect_trajectories": 4,
-            "guidance_scale": 1.0,
-            "num_euler_steps": 2,
-            "cfg_dropout_prob": 0.0,
-            "min_scatter_states": 10,
-            "generated_states_per_class": 10,
-        },
-    }
+def _base_cfg(**overrides) -> dict:
+    cfg = dict(
+        sample_method="sdedit",
+        alpha=0.5,
+        warmup_iters=0,
+        num_samples=8,
+        tau=0.9,
+        policy_trust_std=100.0,
+        model_train_steps=10,
+        model_train_every=1,
+        model_batch_size=16,
+        model_lambda_steps=4,
+        model_net=(16, 16),
+        buffer_size=512,
+        q_top_fraction=0.5,
+        q_filter_k=4,
+        q_mode="off",
+        gamma_mcq=0.99,
+        seed=0,
+    )
+    cfg.update(overrides)
+    return cfg
 
 
-class VCTestDummyEnv(VecEnv):
-    """Minimal VecEnv exposing ``policy`` and dedicated ``relative_state`` groups."""
+def _make_vc(cfg: dict | None = None) -> VisitationCritic:
+    return VisitationCritic(
+        cfg=cfg or _base_cfg(),
+        state_dim=STATE_DIM,
+        act_dim=ACT_DIM,
+        obs_groups={"actor": ["policy"], "critic": ["policy"]},
+        num_envs=NUM_ENVS,
+        device=DEVICE,
+    )
 
-    def __init__(self, device: str = "cpu") -> None:
-        self.num_envs = NUM_ENVS
-        self.num_actions = NUM_ACTIONS
-        self.max_episode_length = 50
-        self.episode_length_buf = torch.zeros(NUM_ENVS, dtype=torch.long, device=device)
-        self.device = device
-        self.cfg = {}
 
-    def get_observations(self) -> TensorDict:
-        return TensorDict(
-            {
-                "policy": torch.randn(self.num_envs, OBS_DIM, device=self.device),
-                "relative_state": torch.randn(self.num_envs, REL_STATE_DIM, device=self.device),
-            },
-            batch_size=[self.num_envs],
-            device=self.device,
+def test_alpha_schedule_constant():
+    sched = resolve_alpha_schedule(0.3)
+    assert sched(0) == pytest.approx(0.3)
+    assert sched(10000) == pytest.approx(0.3)
+
+
+def test_alpha_schedule_linear_decay():
+    sched = resolve_alpha_schedule({"alpha": 1.0, "mode": "linear_decay", "stop_iter": 100})
+    assert sched(0) == pytest.approx(1.0)
+    assert sched(50) == pytest.approx(0.5)
+    assert sched(100) == 0.0
+    assert sched(200) == 0.0
+
+
+def test_vc_alpha_envelope_holds_constant_after_warmup_by_default():
+    """Default behavior: linear ramp during warmup, then HOLD at base_alpha forever.
+    """
+    cfg = _base_cfg(alpha=0.6, warmup_iters=100, stop_iter=None)
+    vc = _make_vc(cfg)
+    # Ramp from 0 to base_alpha.
+    assert vc.alpha(0) == pytest.approx(0.0)
+    assert vc.alpha(50) == pytest.approx(0.3)
+    assert vc.alpha(99) == pytest.approx(0.6 * 0.99)
+    # After warmup: hold at base_alpha forever.
+    assert vc.alpha(100) == pytest.approx(0.6)
+    assert vc.alpha(1_000) == pytest.approx(0.6)
+    assert vc.alpha(100_000) == pytest.approx(0.6)
+
+
+def test_vc_alpha_envelope_warmup_and_decay():
+    cfg = _base_cfg(alpha=1.0, warmup_iters=10, stop_iter=100, decay_start_iter=50)
+    vc = _make_vc(cfg)
+    assert vc.alpha(0) == pytest.approx(0.0)
+    assert vc.alpha(5) == pytest.approx(0.5)
+    assert vc.alpha(10) == pytest.approx(1.0)
+    assert vc.alpha(50) == pytest.approx(1.0)
+    assert vc.alpha(75) == pytest.approx(0.5)
+    assert vc.alpha(100) == pytest.approx(0.0)
+
+
+def test_local_topmcq_mask_keeps_top_percentile():
+    # 6 points laid out on a line; high MCQ rows should survive a 50% top filter.
+    states = torch.tensor([[0.0], [1.0], [2.0], [3.0], [4.0], [5.0]])
+    mcq = torch.tensor([0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
+    mask = _local_topmcq_mask(states, mcq, states, mcq, k_nn=3, keep_frac=0.5)
+    # The highest-MCQ rows in each local neighborhood must survive.
+    assert bool(mask[-1]) is True
+    assert bool(mask[0]) is False
+
+
+def test_saflow_buffer_admits_and_trains():
+    flow = SAFlow(state_dim=STATE_DIM, act_dim=ACT_DIM, device=torch.device(DEVICE), hidden_sizes=(16, 16))
+    rows = torch.randn(64, STATE_DIM + ACT_DIM)
+    mcq = torch.randn(64)
+    flow.add(rows, mcq)
+    assert flow.buffer_size == 64
+    loss = flow.train_steps(n_steps=5, batch_size=16)
+    assert loss is not None and loss > 0.0
+    cands = flow.sample_sdedit(
+        torch.randn(2, STATE_DIM),
+        torch.randn(2, ACT_DIM),
+        tau=0.9,
+        num_samples=4,
+        n_steps=3,
+    )
+    assert cands.shape == (2, 4, STATE_DIM + ACT_DIM)
+
+
+def test_saflow_buffer_eviction_caps_at_max():
+    flow = SAFlow(state_dim=2, act_dim=1, device=torch.device(DEVICE), max_buffer=32, hidden_sizes=(8,))
+    # Push many rows; eviction filters by MCQ when capacity exceeded.
+    for _ in range(20):
+        rows = torch.randn(8, 3)
+        mcq = torch.randn(8)
+        flow.add(rows, mcq)
+    assert flow.buffer_size <= 32
+
+
+def test_vc_action_falls_back_to_ppo_before_training():
+    vc = _make_vc()
+    state = torch.randn(NUM_ENVS, STATE_DIM)
+    obs_td = _make_obs_td(state)
+    a_ppo = torch.randn(NUM_ENVS, ACT_DIM)
+    a_mean = torch.zeros(NUM_ENVS, ACT_DIM)
+    a_std = torch.ones(NUM_ENVS, ACT_DIM)
+    out = vc.vc_action(obs_td, a_ppo, a_mean, a_std)
+    assert torch.allclose(out, a_ppo)
+
+
+def test_record_step_pushes_completed_episodes_into_buffer():
+    vc = _make_vc()
+    # Roll for 5 steps with done on the 5th to flush an episode for env 0.
+    obs_t = torch.randn(NUM_ENVS, STATE_DIM)
+    for t in range(5):
+        action = torch.randn(NUM_ENVS, ACT_DIM)
+        reward = torch.randn(NUM_ENVS)
+        next_obs_t = torch.randn(NUM_ENVS, STATE_DIM)
+        done = torch.zeros(NUM_ENVS)
+        if t == 4:
+            done[0] = 1.0
+        vc.record_step(
+            _make_obs_td(obs_t),
+            action,
+            reward,
+            _make_obs_td(next_obs_t),
+            done,
         )
-
-    def step(self, actions: torch.Tensor) -> tuple[TensorDict, torch.Tensor, torch.Tensor, dict]:
-        self.episode_length_buf += 1
-        dones = (self.episode_length_buf >= self.max_episode_length).float()
-        self.episode_length_buf[dones.bool()] = 0
-        obs = self.get_observations()
-        rewards = torch.randn(self.num_envs, device=self.device)
-        extras: dict = {"time_outs": torch.zeros(self.num_envs, device=self.device)}
-        return obs, rewards, dones, extras
-
-    def set_reset_states(self, env_ids: torch.Tensor, states: torch.Tensor) -> torch.Tensor | None:  # noqa: ARG002
-        return None
+        obs_t = next_obs_t
+    # 5 transitions from env 0 should now sit in the visitation buffer.
+    assert vc.flow.buffer_size == 5
 
 
-def _make_train_cfg_with_vc() -> dict:
-    """Return a minimal training configuration with VC enabled (copy-safe for construct_algorithm)."""
-    return {
-        "num_steps_per_env": NUM_STEPS,
-        "save_interval": 100,
-        "multi_gpu": None,
-        "obs_groups": {
-            "actor": ["policy"],
-            "critic": ["policy"],
-            "relative_state": ["relative_state"],
-        },
-        "algorithm": _vc_algorithm_cfg(),
-        "actor": {
-            "class_name": "MLPModel",
-            "hidden_dims": [32, 32],
-            "activation": "elu",
-            "distribution_cfg": {"class_name": "GaussianDistribution", "init_std": 1.0, "std_type": "scalar"},
-        },
-        "critic": {
-            "class_name": "MLPModel",
-            "hidden_dims": [32, 32],
-            "activation": "elu",
-        },
-    }
+def test_vc_action_sdedit_returns_blendable_shape_after_training():
+    vc = _make_vc()
+    # Force-feed the buffer so the flow has data to train on.
+    rows = torch.randn(128, STATE_DIM + ACT_DIM)
+    mcq = torch.randn(128)
+    vc.flow.add(rows, mcq)
+    vc.flow.train_steps(n_steps=5, batch_size=16)
+    assert vc.is_ready()
+    state = torch.randn(NUM_ENVS, STATE_DIM)
+    a_ppo = torch.randn(NUM_ENVS, ACT_DIM)
+    a_mean = torch.zeros(NUM_ENVS, ACT_DIM)
+    a_std = torch.ones(NUM_ENVS, ACT_DIM) * 10.0  # wide trust band
+    out = vc.vc_action(_make_obs_td(state), a_ppo, a_mean, a_std)
+    assert out.shape == a_ppo.shape
 
 
-def _build_ppo_with_vc() -> tuple[PPO, TensorDict, VCTestDummyEnv]:
-    """Construct PPO + visitation critic via ``construct_algorithm``."""
-    cfg = copy.deepcopy(_make_train_cfg_with_vc())
-    env = VCTestDummyEnv(device="cpu")
-    obs = env.get_observations()
-    ppo = PPO.construct_algorithm(obs, env, cfg, device="cpu")
-    return ppo, obs, env
+def test_vc_action_cfg_path_runs_with_aflow():
+    cfg = _base_cfg(sample_method="cfg", num_samples=6)
+    vc = _make_vc(cfg)
+    assert isinstance(vc.flow, AFlow)
+    rows = torch.randn(64, STATE_DIM + ACT_DIM)
+    mcq = torch.randn(64)
+    vc.flow.add(rows, mcq)
+    vc.flow.train_steps(n_steps=3, batch_size=8)
+    state = torch.randn(NUM_ENVS, STATE_DIM)
+    out = vc.vc_action(_make_obs_td(state), torch.randn(NUM_ENVS, ACT_DIM), torch.zeros(NUM_ENVS, ACT_DIM), torch.ones(NUM_ENVS, ACT_DIM) * 10.0)
+    assert out.shape == (NUM_ENVS, ACT_DIM)
 
 
-def _seed_vc_buffer(ppo: PPO, num_traj: int = 16, state_dim: int = REL_STATE_DIM) -> None:
-    """Populate trajectory lists with synthetic data."""
-    vc = ppo.visitation_critic
-    assert vc is not None
-    buf = vc.buffer
-    for _ in range(num_traj):
-        buf.start_states.append(torch.randn(state_dim))
-        buf.end_states.append(torch.randn(state_dim) * 0.01)
-        buf.cumulative_rewards.append(0.0)
-        buf.trajectory_lengths.append(3)
+def test_vc_action_inpainting_falls_back_to_a_ppo_outside_trust_band():
+    # policy_trust_std=0 makes the trust band an empty set unless the candidate
+    # exactly equals the mean — practically: no candidate is in trust → use a_ppo.
+    cfg = _base_cfg(sample_method="inpainting", num_samples=8, policy_trust_std=0.0)
+    vc = _make_vc(cfg)
+    rows = torch.randn(64, STATE_DIM + ACT_DIM)
+    mcq = torch.randn(64)
+    vc.flow.add(rows, mcq)
+    vc.flow.train_steps(n_steps=3, batch_size=8)
+    state = torch.randn(NUM_ENVS, STATE_DIM)
+    a_ppo = torch.randn(NUM_ENVS, ACT_DIM)
+    a_mean = torch.zeros(NUM_ENVS, ACT_DIM)
+    a_std = torch.ones(NUM_ENVS, ACT_DIM)
+    out = vc.vc_action(_make_obs_td(state), a_ppo, a_mean, a_std)
+    assert torch.allclose(out, a_ppo)
+    assert vc.last_vc_active_frac == 0.0
 
 
-class TestTrajectoryBuffer:
-    """Episode segmentation rules used for CFM labels."""
-
-    def test_done_uses_previous_step_obs_as_end_state(self) -> None:
-        """On terminal step, recorded end state is ``_last_obs``, not the post-reset observation."""
-        buffer = TrajectoryBuffer(max_trajectories=100, state_dim=4, device="cpu")
-        obs_a = torch.tensor([[1.0, 2.0, 3.0, 4.0]])
-        obs_b = torch.tensor([[5.0, 6.0, 7.0, 8.0]])
-        obs_c = torch.tensor([[99.0, 99.0, 99.0, 99.0]])
-        r = torch.zeros(1)
-        buffer.add_step(obs_a, r, torch.zeros(1))
-        buffer.add_step(obs_b, r, torch.zeros(1))
-        buffer.add_step(obs_c, r, torch.ones(1))
-
-        assert buffer.num_trajectories == 1
-        assert torch.allclose(buffer.start_states[0], obs_a.squeeze(0))
-        assert torch.allclose(buffer.end_states[0], obs_b.squeeze(0))
+def test_vc_action_cfg_falls_back_to_a_ppo_outside_trust_band():
+    cfg = _base_cfg(sample_method="cfg", num_samples=8, policy_trust_std=0.0)
+    vc = _make_vc(cfg)
+    rows = torch.randn(64, STATE_DIM + ACT_DIM)
+    mcq = torch.randn(64)
+    vc.flow.add(rows, mcq)
+    vc.flow.train_steps(n_steps=3, batch_size=8)
+    state = torch.randn(NUM_ENVS, STATE_DIM)
+    a_ppo = torch.randn(NUM_ENVS, ACT_DIM)
+    a_mean = torch.zeros(NUM_ENVS, ACT_DIM)
+    a_std = torch.ones(NUM_ENVS, ACT_DIM)
+    out = vc.vc_action(_make_obs_td(state), a_ppo, a_mean, a_std)
+    assert torch.allclose(out, a_ppo)
 
 
-class TestVisitationCriticLabeling:
-    """``l2_ball`` label assignment on end-state norms."""
-
-    def test_l2_ball_labels_end_state_norm(self) -> None:
-        vc_cfg = {
-            "label_mode": "l2_ball",
-            "l2_radius": 2.0,
-            "conditioning_type": "discrete",
-            "num_classes": 2,
-            "train_every_n_iters": 1,
-            "num_warmup_iterations": 0,
-            "num_train_steps": 1,
-            "batch_size": 4,
-            "max_episode_length": 50,
-        }
-        vc = VisitationCritic(
-            vc_cfg,
-            state_dim=4,
-            obs_groups={"relative_state": ["relative_state"]},
-            device="cpu",
-        )
-        # Good (1) requires end-state norm < radius AND length == max_episode_length.
-        # Rows: (near radius, complete), (inside, complete), (inside, incomplete), (inside, complete).
-        data = {
-            "start_states": torch.zeros(4, 4),
-            "end_states": torch.tensor(
-                [
-                    [3.0, 0.0, 0.0, 0.0],  # norm > radius -> bad regardless
-                    [0.5, 0.0, 0.0, 0.0],  # inside + complete -> good
-                    [0.5, 0.0, 0.0, 0.0],  # inside + incomplete -> bad
-                    [0.0, 0.0, 0.0, 0.0],  # inside + complete -> good
-                ]
-            ),
-            "cumulative_rewards": torch.zeros(4),
-            "trajectory_lengths": torch.tensor([50, 50, 10, 50]),
-        }
-        _starts, labels = vc._label_trajectories(data)
-        assert labels.tolist() == [0, 1, 0, 1]
+def test_vc_action_sdedit_falls_back_to_a_ppo_outside_trust_band():
+    cfg = _base_cfg(sample_method="sdedit", num_samples=8, policy_trust_std=0.0)
+    vc = _make_vc(cfg)
+    rows = torch.randn(64, STATE_DIM + ACT_DIM)
+    mcq = torch.randn(64)
+    vc.flow.add(rows, mcq)
+    vc.flow.train_steps(n_steps=3, batch_size=8)
+    state = torch.randn(NUM_ENVS, STATE_DIM)
+    a_ppo = torch.randn(NUM_ENVS, ACT_DIM)
+    a_mean = torch.zeros(NUM_ENVS, ACT_DIM)
+    a_std = torch.ones(NUM_ENVS, ACT_DIM)
+    out = vc.vc_action(_make_obs_td(state), a_ppo, a_mean, a_std)
+    assert torch.allclose(out, a_ppo)
 
 
-class TestVisitationCriticSchedule:
-    """``should_collect`` / ``should_train`` gating."""
-
-    def test_should_train_requires_buffer_and_schedule(self) -> None:
-        vc_cfg = {
-            "label_mode": "l2_ball",
-            "conditioning_type": "discrete",
-            "num_classes": 2,
-            "train_every_n_iters": 5,
-            "num_warmup_iterations": 10,
-            "num_train_steps": 1,
-            "batch_size": 4,
-            "max_episode_length": 50,
-        }
-        vc = VisitationCritic(
-            vc_cfg,
-            state_dim=4,
-            obs_groups={"relative_state": ["relative_state"]},
-            device="cpu",
-        )
-        assert not vc.should_train(10)
-        vc.buffer.start_states.append(torch.randn(4))
-        vc.buffer.end_states.append(torch.randn(4))
-        vc.buffer.cumulative_rewards.append(0.0)
-        vc.buffer.trajectory_lengths.append(2)
-        assert vc.should_train(10)
-        assert not vc.should_train(9)
-
-
-class TestPPOWithVisitationCritic:
-    """PPO.update triggers CFM training when ``should_train`` is true."""
-
-    def test_construct_algorithm_creates_visitation_critic(self) -> None:
-        ppo, _obs, _env = _build_ppo_with_vc()
-        assert ppo.visitation_critic is not None
-        assert ppo.visitation_critic.state_dim == REL_STATE_DIM
-
-    def test_update_runs_cfm_when_buffer_populated(self) -> None:
-        ppo, obs, _env = _build_ppo_with_vc()
-        _seed_vc_buffer(ppo, num_traj=16)
-
-        for _ in range(NUM_STEPS):
-            ppo.act(obs)
-            stored_values = ppo.transition.values.clone()
-            raw_reward = torch.ones(NUM_ENVS)
-            dones = torch.zeros(NUM_ENVS)
-            time_outs = torch.zeros(NUM_ENVS)
-            ppo.process_env_step(obs, raw_reward, dones, {"time_outs": time_outs})
-
-        ppo.compute_returns(obs)
-        loss_dict = ppo.update(iteration=0)
-
-        assert "visitation_critic/cfm_loss" in loss_dict
-        assert ppo.visitation_critic is not None
-        assert ppo.visitation_critic.is_trained
-
-
-class TestOnPolicyRunnerRequiresEvalEnvWithVisitationCritic:
-    """OnPolicyRunner must receive eval_env when VC is enabled."""
-
-    def test_raises_when_vc_enabled_without_eval_env(self) -> None:
-        from rsl_rl.runners import OnPolicyRunner
-
-        cfg = {
-            "num_steps_per_env": NUM_STEPS,
-            "save_interval": 100,
-            "obs_groups": {
-                "actor": ["policy", "relative_state"],
-                "critic": ["policy", "relative_state"],
-                "relative_state": ["relative_state"],
-            },
-            "algorithm": _vc_algorithm_cfg(),
-            "actor": {
-                "class_name": "MLPModel",
-                "hidden_dims": [32, 32],
-                "activation": "elu",
-                "distribution_cfg": {
-                    "class_name": "GaussianDistribution",
-                    "init_std": 1.0,
-                    "std_type": "scalar",
-                },
-            },
-            "critic": {
-                "class_name": "MLPModel",
-                "hidden_dims": [32, 32],
-                "activation": "elu",
-            },
-        }
-        with pytest.raises(ValueError, match="eval_env"):
-            OnPolicyRunner(VCTestDummyEnv(), cfg, log_dir=None, device="cpu")
-
-
-class TestResolveVisitationCriticConfig:
-    """Guardrails for observation groups."""
-
-    def test_rejects_policy_fallback_for_relative_state(self) -> None:
-        obs = make_obs(NUM_ENVS, OBS_DIM)
-        bad_groups = {"relative_state": ["policy"]}
-        vc_cfg = {"enabled": True}
-        with pytest.raises(ValueError, match="relative_state"):
-            resolve_visitation_critic_config(vc_cfg, obs, bad_groups, VCTestDummyEnv())
+def test_vc_train_returns_loss_dict_with_buffer_metrics():
+    vc = _make_vc()
+    rows = torch.randn(64, STATE_DIM + ACT_DIM)
+    mcq = torch.randn(64)
+    vc.flow.add(rows, mcq)
+    losses = vc.train()
+    assert "vc/flow_loss" in losses
+    assert "vc/buffer_size" in losses
+    assert losses["vc/buffer_size"] == pytest.approx(64.0)

@@ -15,7 +15,12 @@ from rsl_rl.utils.qpos import integrate_qpos
 class RslRlVecEnvSpecialResetWrapper(RslRlVecEnvWrapper):
     """Extends RslRlVecEnvWrapper with set_reset_states for the visitation critic."""
 
-    def set_reset_states(self, env_ids: torch.Tensor, states: torch.Tensor) -> torch.Tensor:
+    def set_reset_states(
+        self,
+        env_ids: torch.Tensor,
+        states: torch.Tensor,
+        reset_context: dict[str, torch.Tensor] | None = None,
+    ) -> torch.Tensor:
         """Override reset states for specified envs with VC-generated relative states.
 
         Converts tangent-space relative states (2*nv) to absolute coordinates and
@@ -29,6 +34,9 @@ class RslRlVecEnvSpecialResetWrapper(RslRlVecEnvWrapper):
             env_ids: Indices of environments to override. Shape: (num_resets,)
             states: Relative states from the VC. Shape: (num_resets, 2 * nv).
                 Layout: [rel_qpos(nv), rel_qvel(nv)].
+            reset_context: Optional per-reset metadata. If ``motion_time_steps`` is
+                present and the env has a tracking motion command, the reference time
+                slice is updated before observations are refetched.
 
         Returns:
             Absolute ``qpos`` tensor that was integrated and written: shape
@@ -36,6 +44,14 @@ class RslRlVecEnvSpecialResetWrapper(RslRlVecEnvWrapper):
         """
         env: ManagerBasedRlEnv = self.unwrapped
         robot: Entity = env.scene["robot"]
+        if reset_context is not None and "motion_time_steps" in reset_context:
+            try:
+                motion = env.command_manager.get_term("motion")
+                motion.time_steps[env_ids] = reset_context["motion_time_steps"].to(
+                    device=motion.time_steps.device, dtype=motion.time_steps.dtype
+                )
+            except Exception:
+                pass
 
         nv = states.shape[-1] // 2
         rel_qpos = states[:, :nv]
