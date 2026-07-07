@@ -17,7 +17,7 @@ from mjlab.utils.os import get_wandb_checkpoint_path
 from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
 from mjlab.viewer import NativeMujocoViewer, ViserPlayViewer
-from src.utils.mjlab_on_policy_runner_with_eval import MjlabOnPolicyRunnerWithEval
+from mjlab.rl.runner import MjlabOnPolicyRunner
 
 
 @dataclass(frozen=True)
@@ -153,7 +153,7 @@ def run_play(task_id: str, cfg: PlayConfig):
 
       policy = PolicyRandom()
   else:
-    runner_cls = load_runner_cls(task_id) or MjlabOnPolicyRunnerWithEval
+    runner_cls = load_runner_cls(task_id) or MjlabOnPolicyRunner
     runner = runner_cls(env, asdict(agent_cfg), device=device)
     runner.load(
       str(resume_path), load_cfg={"actor": True}, strict=True, map_location=device

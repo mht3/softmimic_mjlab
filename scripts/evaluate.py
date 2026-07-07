@@ -31,7 +31,7 @@ from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg, load_run
 from mjlab.tasks.tracking.mdp import MotionCommand, MotionCommandCfg
 from mjlab.utils.lab_api.math import quat_apply, quat_from_euler_xyz, quat_mul
 from mjlab.utils.torch import configure_torch_backends
-from src.utils.mjlab_on_policy_runner_with_eval import MjlabOnPolicyRunnerWithEval
+from mjlab.rl.runner import MjlabOnPolicyRunner
 
 
 # ---------------------------------------------------------------------------
@@ -877,7 +877,7 @@ def main():
     motion_cmd = env.command_manager.get_term("motion")
 
   # --- Evaluate each policy ---
-  runner_cls = load_runner_cls(args.task) or MjlabOnPolicyRunnerWithEval
+  runner_cls = load_runner_cls(args.task) or MjlabOnPolicyRunner
   runner = runner_cls(env_wrapped, asdict(agent_cfg), device=device)
 
   all_results: dict[str, dict[str, dict]] = {}

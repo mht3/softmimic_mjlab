@@ -7,22 +7,11 @@ from mjlab.rl.exporter_utils import (
   attach_metadata_to_onnx,
   get_base_metadata,
 )
-from src.utils.mjlab_on_policy_runner_with_eval import MjlabOnPolicyRunnerWithEval
-from rsl_rl.env import VecEnv
+from mjlab.rl.runner import MjlabOnPolicyRunner
 
 
-class BalanceOnPolicyRunner(MjlabOnPolicyRunnerWithEval):
+class BalanceOnPolicyRunner(MjlabOnPolicyRunner):
   env: RslRlVecEnvWrapper
-
-  def __init__(
-    self,
-    env: VecEnv,
-    train_cfg: dict,
-    log_dir: str | None = None,
-    device: str = "cpu",
-    eval_env: VecEnv | None = None,
-  ) -> None:
-    super().__init__(env, train_cfg, log_dir, device, eval_env=eval_env)
 
   def save(self, path: str, infos=None):
     super().save(path, infos)

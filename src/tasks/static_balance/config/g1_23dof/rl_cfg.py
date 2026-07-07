@@ -1,7 +1,5 @@
 """RL configuration for Unitree G1-23DOF velocity task."""
 
-from dataclasses import dataclass, field
-
 from mjlab.rl import (
   RslRlModelCfg,
   RslRlOnPolicyRunnerCfg,
@@ -9,30 +7,9 @@ from mjlab.rl import (
 )
 
 
-@dataclass
-class EvalCfg:
-  """Configuration for periodic evaluation on a separate medium-perturbation env."""
-
-  enabled: bool = True
-  """Whether to run evaluation during training."""
-  eval_every_n_iters: int = 100
-  """Run evaluation every N PPO iterations."""
-  eval_num_episodes: int = 1000
-  """Number of episodes to average over per evaluation."""
-  eval_num_envs: int = 1000
-  """Number of parallel envs in the eval simulator."""
-
-
-@dataclass
-class RslRlOnPolicyRunnerCfgWithEval(RslRlOnPolicyRunnerCfg):
-  """Runner cfg extended with an evaluation block."""
-
-  eval: EvalCfg = field(default_factory=EvalCfg)
-
-
 def unitree_g1_23dof_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """Create RL runner configuration for Unitree G1-23DOF velocity task."""
-  return RslRlOnPolicyRunnerCfgWithEval(
+  return RslRlOnPolicyRunnerCfg(
     obs_groups={
       "actor": ("actor",),
       "critic": ("critic",),

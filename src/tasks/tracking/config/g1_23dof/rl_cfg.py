@@ -1,7 +1,5 @@
 """RL configuration for Unitree G1_23Dof tracking task."""
 
-from dataclasses import dataclass, field
-
 from mjlab.rl import (
   RslRlModelCfg,
   RslRlOnPolicyRunnerCfg,
@@ -9,22 +7,9 @@ from mjlab.rl import (
 )
 
 
-@dataclass
-class EvalCfg:
-  enabled: bool = False
-  eval_every_n_iters: int = 100
-  eval_num_episodes: int = 1000
-  eval_num_envs: int = 1000
-
-
-@dataclass
-class RslRlOnPolicyRunnerCfgWithEval(RslRlOnPolicyRunnerCfg):
-  eval: EvalCfg = field(default_factory=EvalCfg)
-
-
 def unitree_g1_23dof_tracking_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
   """Create RL runner configuration for Unitree G1_23Dof tracking task."""
-  return RslRlOnPolicyRunnerCfgWithEval(
+  return RslRlOnPolicyRunnerCfg(
     obs_groups={
       "actor": ("actor",),
       "critic": ("critic",),
