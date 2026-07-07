@@ -1,1161 +1,1002 @@
-# @2026 Matthew Taylor
+# Copyright (c) 2021-2026, ETH Zurich and NVIDIA CORPORATION
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
 
-"""Visitation Critic extension using Conditional Flow Matching (CFM).
+"""Visitation Critic for PPO (rsl_rl port of SB3 VCPPO).
 
-Collects whole trajectories, labels them (good/bad), trains a CFM model to learn the
-distribution of start states conditioned on trajectory quality, and generates targeted
-reset states from the "not good" distribution.
+Models the density of locally high-value (state, action) regions with a flow-matching
+model. At rollout time, a candidate action sampled from the model is alpha-blended
+with the policy action; PPO's stored log_prob is recomputed on the blend so the
+surrogate stays consistent. The PPO objective is otherwise unchanged.
+
+Reference implementation:
+    visitation_critic/algorithms/gymnasium_baselines/vcppo/vcppo.py
 """
 
 from __future__ import annotations
 
-import contextlib
-from collections import deque
+import math
+from typing import Sequence
+
+import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 from tensordict import TensorDict
-from typing import Any
 
 from rsl_rl.env import VecEnv
-from rsl_rl.modules.cfm import (
-    MLPConditionalVectorField,
-    MLPContinuousConditionalVectorField,
-    GaussianConditionalProbabilityPath,
-    EulerODESolver,
-    cfg_guided_velocity,
-)
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
 
-class TrajectoryBuffer:
-    """Ring buffer storing complete trajectories for CFM training.
+K_NN_FILTER = 16
+_CFG_NULL_STATE_VAL = -999.0
 
-    Accumulates per-step data from multiple parallel environments and segments them
-    into complete episodes using done flags. All operations are vectorized over envs
-    to avoid Python-level per-env loops.
+
+def _build_mlp(in_dim: int, out_dim: int, hidden_sizes: Sequence[int]) -> nn.Sequential:
+    layers: list[nn.Module] = []
+    last = int(in_dim)
+    for h in hidden_sizes:
+        layers += [nn.Linear(last, int(h)), nn.SiLU()]
+        last = int(h)
+    layers += [nn.Linear(last, int(out_dim))]
+    return nn.Sequential(*layers)
+
+
+# =============================================================================
+# Flow networks
+# =============================================================================
+
+
+class FlowMLP(nn.Module):
+    """Joint flow vector field over concat(state, action) of width state_dim+act_dim."""
+
+    def __init__(self, dim: int, hidden_sizes: Sequence[int] = (128, 128, 128)) -> None:
+        super().__init__()
+        self.dim = int(dim)
+        self.net = _build_mlp(self.dim + 1, self.dim, hidden_sizes)
+
+    def forward(self, x: torch.Tensor, tau: torch.Tensor) -> torch.Tensor:
+        return self.net(torch.cat([x, tau], dim=-1))
+
+
+class CFGActionFlowMLP(nn.Module):
+    """Conditional vector field for p(a | s). Input: cat(a, tau, s_cond)."""
+
+    def __init__(self, state_dim: int, act_dim: int, hidden_sizes: Sequence[int] = (128, 128, 128)) -> None:
+        super().__init__()
+        self.net = _build_mlp(int(act_dim) + 1 + int(state_dim), int(act_dim), hidden_sizes)
+
+    def forward(self, a: torch.Tensor, tau: torch.Tensor, s_cond: torch.Tensor) -> torch.Tensor:
+        return self.net(torch.cat([a, tau, s_cond], dim=-1))
+
+
+# =============================================================================
+# kNN top-MCQ admission filter
+# =============================================================================
+
+
+def _local_topmcq_mask(
+    query_states: torch.Tensor,
+    query_mcq: torch.Tensor,
+    ref_states: torch.Tensor,
+    ref_mcq: torch.Tensor,
+    k_nn: int,
+    keep_frac: float,
+) -> torch.Tensor:
+    """Per-row mask: True iff query_mcq is in the top keep_frac percentile of its
+    k nearest neighbors in ref (by state-slice L2 distance).
+
+    Mirrors SAFlow._local_topmcq_mask in the SB3 implementation but kept torch-only
+    so we don't drag in faiss as a runtime dependency.
     """
+    if query_states.numel() == 0:
+        return torch.zeros(0, dtype=torch.bool, device=query_states.device)
+    if ref_states.numel() == 0:
+        return torch.ones(query_states.shape[0], dtype=torch.bool, device=query_states.device)
+    k = max(1, min(int(k_nn), ref_states.shape[0]))
+    dists = torch.cdist(query_states, ref_states)  # (Q, R)
+    _, nn_idx = dists.topk(k, largest=False, dim=1)
+    nbr_mcq = ref_mcq[nn_idx]  # (Q, k)
+    # 1 - keep_frac quantile of neighbors: anything at or above this is in the top-keep.
+    thresh = torch.quantile(nbr_mcq, 1.0 - keep_frac, dim=1)
+    return query_mcq >= thresh
 
-    def __init__(self, max_trajectories: int, state_dim: int, device: str = "cpu") -> None:
-        self.max_trajectories = max_trajectories
-        self.state_dim = state_dim
-        self.device = device
-        self._initialized = False
 
-        # Storage for completed trajectories
-        self.start_states: list[torch.Tensor] = []  # (state_dim,) each
-        self.end_states: list[torch.Tensor] = []  # (state_dim,) each
-        self.cumulative_rewards: list[float] = []
-        self.trajectory_lengths: list[int] = []
+# =============================================================================
+# State-action flow model with visitation buffer
+# =============================================================================
 
-    def _lazy_init(self, num_envs: int, obs: torch.Tensor) -> None:
-        """Initialize vectorized per-env accumulators on first call."""
-        if self._initialized:
-            return
-        cpu = torch.device("cpu")
-        self._start_obs = torch.zeros(num_envs, self.state_dim, device=cpu)
-        self._last_obs = torch.zeros(num_envs, self.state_dim, device=cpu)
-        self._cum_rewards = torch.zeros(num_envs, device=cpu)
-        self._step_counts = torch.zeros(num_envs, dtype=torch.long, device=cpu)
-        self._initialized = True
+
+class SAFlow:
+    """Flow-matching model over rows = concat(obs, action)."""
+
+    def __init__(
+        self,
+        state_dim: int,
+        act_dim: int,
+        device: torch.device,
+        lr: float = 1e-3,
+        hidden_sizes: Sequence[int] = (128, 128, 128),
+        max_buffer: int = 100_000,
+        k_nn: int = K_NN_FILTER,
+        mcq_percentile: float = 25.0,
+        seed: int = 0,
+    ) -> None:
+        self.state_dim = int(state_dim)
+        self.act_dim = int(act_dim)
+        self.dim = self.state_dim + self.act_dim
+        self.device = torch.device(device)
+        self.hidden_sizes = tuple(int(h) for h in hidden_sizes)
+        self.model: nn.Module = FlowMLP(dim=self.dim, hidden_sizes=self.hidden_sizes).to(self.device)
+        self.opt = optim.Adam(self.model.parameters(), lr=float(lr))
+        self.max_buffer = int(max_buffer)
+        self.k_nn = int(k_nn)
+        self.mcq_keep = float(mcq_percentile) / 100.0
+        # Buffer lives on CPU as a single growing tensor; cheaper than a python list
+        # of arrays when we have to topk across the whole thing every train call.
+        self._buf_sa: torch.Tensor | None = None
+        self._buf_mcq: torch.Tensor | None = None
+        self.last_loss: float | None = None
+        self.last_kept = 0
+        self.last_admitted = 0
+        self.last_candidate_count = 0
+        self._torch_gen = torch.Generator(device=self.device).manual_seed(int(seed))
+        # Separate CPU generator for buffer eviction (the buffer lives on CPU).
+        self._cpu_gen = torch.Generator(device="cpu").manual_seed(int(seed) + 7777)
 
     @property
-    def num_trajectories(self) -> int:
-        return len(self.start_states)
+    def buffer_size(self) -> int:
+        return 0 if self._buf_sa is None else int(self._buf_sa.shape[0])
 
-    def add_step(self, obs: torch.Tensor, rewards: torch.Tensor, dones: torch.Tensor) -> None:
-        """Record one timestep of data from all parallel envs (vectorized).
-
-        IMPORTANT: when ``dones[i]=True``, the environment has already auto-reset and
-        ``obs[i]`` is the *post-reset* observation, not the terminal observation. To
-        record the actual pre-failure state as the trajectory's end state, we use
-        ``_last_obs`` (the obs from the *previous* step, before this terminating step)
-        and process completions BEFORE overwriting ``_last_obs`` with the current obs.
-
-        Args:
-            obs: Observations, shape (num_envs, state_dim).
-            rewards: Rewards, shape (num_envs,).
-            dones: Done flags, shape (num_envs,).
+    def add(self, sa_batch: torch.Tensor, mcq_batch: torch.Tensor) -> None:
+        """Append rows unconditionally. When the buffer overflows, evict uniformly
+        at random down to ``max_buffer`` rows. The local top-MCQ filter is applied
+        only at train time inside ``train_steps`` — pruning at admission time
+        collapses diversity and the flow loses coverage.
         """
-        num_envs = obs.shape[0]
-        self._lazy_init(num_envs, obs)
-
-        obs_cpu = obs.detach().cpu()
-        rewards_cpu = rewards.detach().cpu()
-        dones_cpu = dones.detach().cpu().bool()
-
-        # 1. Process completed episodes FIRST, using stale `_last_obs` which holds
-        #    the obs from the previous step (the pre-failure state).
-        #    Require step_counts >= 1 so that `_last_obs` actually contains a real
-        #    obs from this episode (i.e. the episode had at least 2 steps total).
-        done_complete = dones_cpu & (self._step_counts >= 1)
-        if done_complete.any():
-            done_indices = done_complete.nonzero(as_tuple=True)[0]
-            for idx in done_indices:
-                i = idx.item()
-                self.start_states.append(self._start_obs[i].clone())
-                self.end_states.append(self._last_obs[i].clone())
-                # Include the terminal step's reward in the cumulative total.
-                self.cumulative_rewards.append(
-                    (self._cum_rewards[i] + rewards_cpu[i]).item()
-                )
-                # +1 because the current (terminating) step is also part of the episode
-                self.trajectory_lengths.append(int(self._step_counts[i].item()) + 1)
-
-            # Enforce ring buffer limit
-            overflow = len(self.start_states) - self.max_trajectories
-            if overflow > 0:
-                del self.start_states[:overflow]
-                del self.end_states[:overflow]
-                del self.cumulative_rewards[:overflow]
-                del self.trajectory_lengths[:overflow]
-
-        # 2. Record start obs for envs on their first step (after a reset or fresh).
-        first_step_mask = self._step_counts == 0
-        if first_step_mask.any():
-            self._start_obs[first_step_mask] = obs_cpu[first_step_mask]
-
-        # 3. Update running state for all envs.
-        self._last_obs.copy_(obs_cpu)
-        self._cum_rewards += rewards_cpu
-        self._step_counts += 1
-
-        # 4. Reset accumulators for done envs so the next episode starts clean.
-        if dones_cpu.any():
-            self._cum_rewards[dones_cpu] = 0.0
-            self._step_counts[dones_cpu] = 0
-
-    def get_tensors(self, device: str) -> dict[str, torch.Tensor]:
-        """Return all stored data as tensors on the specified device."""
-        if self.num_trajectories == 0:
-            return {}
-        return {
-            "start_states": torch.stack(self.start_states).to(device),
-            "end_states": torch.stack(self.end_states).to(device),
-            "cumulative_rewards": torch.tensor(self.cumulative_rewards, device=device),
-            "trajectory_lengths": torch.tensor(self.trajectory_lengths, device=device),
-        }
-
-    def clear(self) -> None:
-        """Clear all stored trajectories (keeps in-progress accumulators)."""
-        self.start_states.clear()
-        self.end_states.clear()
-        self.cumulative_rewards.clear()
-        self.trajectory_lengths.clear()
-
-
-class VisitationCritic:
-    """Visitation Critic using Conditional Flow Matching.
-
-    Learns the conditional distribution of start states given trajectory quality labels,
-    then generates reset states from the "not good" distribution to create a training
-    curriculum.
-    """
-
-    def __init__(self, cfg: dict, state_dim: int, obs_groups: dict, device: str = "cpu") -> None:
-        self.cfg = cfg
-        self.state_dim = state_dim
-        self.obs_groups = obs_groups
-        self.device = device
-        self._trained = False
-
-        # Training schedule
-        self.train_every_n_iters: int = cfg["train_every_n_iters"]
-        self.num_warmup_iterations: int = cfg.get("num_warmup_iterations", 0)
-        self.num_train_steps: int = cfg["num_train_steps"]
-        self.learning_rate: float = cfg.get("learning_rate", 1e-3)
-        self.warmup_steps: int = cfg.get("warmup_steps", 500)
-        self.batch_size: int = cfg.get("batch_size", 1000)
-        self.max_num_trains: int = cfg.get("max_num_trains", 1)
-        self._num_trains: int = 0
-
-        # Labeling config
-        self.label_mode: str = cfg["label_mode"]
-        self.l2_radius: float = cfg.get("l2_radius", 4.0)
-        self.max_episode_length: int | None = cfg.get("max_episode_length", None)
-        # reset_bin_probs samples a conditioning label at reset-pool generation time.
-        # l2_ball  : 2 bins — (bad=0, good=1), default (0.4, 0.6).
-        # reward_bins: 4 bins — (fail-low, fail-high, succeed-low, succeed-high),
-        #              default (0.1, 0.4, 0.4, 0.1).
-        if self.label_mode == "reward_bins":
-            default_probs = [0.1, 0.4, 0.4, 0.1]
-            expected_len = 4
-        elif self.label_mode == "l2_ball":
-            default_probs = [0.4, 0.6]
-            expected_len = 2
-        else:
-            default_probs = None
-            expected_len = None
-        self.reset_bin_probs: list[float] = list(
-            cfg.get("reset_bin_probs", default_probs or [])
-        )
-        if self.label_mode in ("reward_bins", "l2_ball"):
-            if self.max_episode_length is None:
-                raise ValueError(
-                    f"label_mode='{self.label_mode}' requires max_episode_length in cfg "
-                    "(injected automatically by resolve_visitation_critic_config)."
-                )
-            if len(self.reset_bin_probs) != expected_len:
-                raise ValueError(
-                    f"reset_bin_probs for label_mode='{self.label_mode}' must have length "
-                    f"{expected_len}, got {len(self.reset_bin_probs)}"
-                )
-            probs_sum = sum(self.reset_bin_probs)
-            if abs(probs_sum - 1.0) > 1e-3:
-                raise ValueError(
-                    f"reset_bin_probs must sum to 1.0, got {probs_sum}"
-                )
-
-        # Generation config
-        self.guidance_scale: float = cfg.get("guidance_scale", 2.5)
-        self.num_euler_steps: int = cfg.get("num_euler_steps", 100)
-        self.cfg_dropout_prob: float = cfg.get("cfg_dropout_prob", 0.25)
-        self.min_scatter_states: int = cfg.get("min_scatter_states", 500)
-        self.generated_states_per_class: int = cfg.get("generated_states_per_class", 500)
-        # Reset state pool: generated once after training and resampled cheaply at done-time.
-        # Rebuilt when a new VC model is trained or after reset_pool_refresh_interval episodes.
-        self.reset_pool_size: int = cfg.get("reset_pool_size", 100_000)
-        self.reset_pool_refresh_interval: int = cfg.get("reset_pool_refresh_interval", 100_000)
-        self._reset_pool: torch.Tensor | None = None
-        self._reset_pool_episodes_seen: int = 0
-
-        # Reset behavior
-        self.reset_condition_label: int = cfg.get("reset_condition_label", 0)
-        self.reset_condition_value: float = cfg.get("reset_condition_value", 0.1)
-
-        # Deterministic trajectory collection settings
-        self.num_collect_trajectories: int = cfg.get("num_collect_trajectories", 10000)
-        self.disable_push_during_collection: bool = cfg.get(
-            "disable_push_during_collection", False
-        )
-        self.collection_push_term_name: str = cfg.get(
-            "collection_push_term_name", "push_robot"
-        )
-
-        # Build model
-        self.conditioning_type: str = cfg["conditioning_type"]
-        self.model = self._build_model()
-        self.model.to(self.device)
-        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.learning_rate, weight_decay=1e-4)
-
-        # Probability path and ODE solver
-        self.path = GaussianConditionalProbabilityPath()
-        self.solver = EulerODESolver()
-
-        # Trajectory buffer
-        self.buffer = TrajectoryBuffer(
-            max_trajectories=cfg.get("max_trajectories", 10000),
-            state_dim=state_dim,
-            device="cpu",
-        )
-
-        # Precompute null condition for discrete mode
-        if self.conditioning_type == "discrete":
-            self._null_label = cfg.get("null_label", cfg.get("num_classes", 2))
-        self._wandb_media: dict[str, Any] = {}
-
-        # Rolling bin label deque — one entry per completed episode (the bin index).
-        # Shared by l2_ball (bins 0/1) and reward_bins (bins 0-3). Fracs are computed
-        # over the last 100 completed episodes at log time.
-        self._rollout_bin_buffer: deque[int] = deque(maxlen=100)
-
-    def _build_model(self) -> nn.Module:
-        """Construct the vector field network from config."""
-        hidden_dims = self.cfg.get("hidden_dims", [1024, 1024, 1024])
-        activation = self.cfg.get("activation", "swish")
-
-        if self.conditioning_type == "discrete":
-            return MLPConditionalVectorField(
-                state_dim=self.state_dim,
-                hidden_dims=hidden_dims,
-                num_classes=self.cfg.get("num_classes", 2),
-                class_dim=self.cfg.get("class_dim", 8),
-                activation=activation,
-            )
-        elif self.conditioning_type == "continuous":
-            return MLPContinuousConditionalVectorField(
-                state_dim=self.state_dim,
-                hidden_dims=hidden_dims,
-                cond_dim=self.cfg.get("cond_dim", 1),
-                null_value=self.cfg.get("null_value", -1.0),
-                activation=activation,
-            )
-        else:
-            raise ValueError(f"Unknown conditioning_type: {self.conditioning_type}")
-
-    def _reinitialize_model(self) -> None:
-        """Reinitialize model weights and optimizer from scratch."""
-        self.model = self._build_model()
-        self.model.to(self.device)
-        self.optimizer = torch.optim.AdamW(
-            self.model.parameters(), lr=self.learning_rate, weight_decay=1e-4
-        )
-
-    # --- Reset pool ---
-
-    def _build_reset_pool(self) -> None:
-        """Pre-generate the full reset state pool using the trained CFM model.
-
-        Generates ``reset_pool_size`` states in one batched ODE solve (or in
-        chunks if the pool is very large) and caches them on device. After this,
-        ``generate_reset_states`` is O(1) — a simple random index lookup.
-
-        Also resets the episode counter used to trigger future refreshes.
-        """
-        self.model.eval()
-        chunk = min(self.reset_pool_size, 10_000)  # avoid OOM on huge pools
-        parts: list[torch.Tensor] = []
-        remaining = self.reset_pool_size
-        with torch.no_grad():
-            while remaining > 0:
-                n = min(chunk, remaining)
-                x0 = torch.randn(n, self.state_dim, device=self.device)
-                if self.conditioning_type == "discrete":
-                    if self.label_mode in ("reward_bins", "l2_ball"):
-                        probs = torch.tensor(
-                            self.reset_bin_probs, dtype=torch.float, device=self.device
-                        )
-                        cond = torch.multinomial(probs, n, replacement=True).long()
-                    else:
-                        cond = torch.full((n,), self.reset_condition_label, dtype=torch.long, device=self.device)
-                    null_cond = torch.full((n,), self._null_label, dtype=torch.long, device=self.device)
-                elif self.conditioning_type == "continuous":
-                    cond = torch.full((n, self.model.cond_dim), self.reset_condition_value, device=self.device)
-                    null_cond = self.model.get_null_embedding(n)
-                else:
-                    raise ValueError(f"Unknown conditioning_type: {self.conditioning_type}")
-                gs = self.guidance_scale
-                def guided_fn(x: torch.Tensor, t: torch.Tensor, _cond=cond, _null=null_cond) -> torch.Tensor:
-                    return cfg_guided_velocity(self.model, x, t, gs, cond=_cond, null_cond=_null)
-                parts.append(self.solver.solve(x0, guided_fn, num_steps=self.num_euler_steps))
-                remaining -= n
-        self._reset_pool = torch.cat(parts, dim=0)
-        self._reset_pool_episodes_seen = 0
-        self.model.train()
-
-    # --- Data Collection ---
-
-    def store_trajectory_data(self, obs: TensorDict, rewards: torch.Tensor, dones: torch.Tensor) -> None:
-        """Store one timestep of trajectory data from all envs.
-
-        Args:
-            obs: Observation TensorDict from the environment.
-            rewards: Rewards tensor, shape (num_envs,).
-            dones: Done flags tensor, shape (num_envs,).
-        """
-        flat_obs = torch.cat([obs[k] for k in self.obs_groups["relative_state"]], dim=-1)
-        self.buffer.add_step(flat_obs, rewards, dones)
-
-    def record_episode_outcomes(
-        self, cum_rewards: torch.Tensor, lengths: torch.Tensor
-    ) -> None:
-        """Bin completed PPO episodes into the rolling outcome buffer.
-
-        Called from the runner at each step where episodes terminate. Supports
-        both l2_ball (2 bins: bad=0, good=1) and reward_bins (4 bins). Each
-        completed episode appends one bin label to the rolling deque (maxlen=100).
-
-        Args:
-            cum_rewards: Cumulative rewards of completed episodes, shape (K,).
-            lengths: Episode lengths of completed episodes, shape (K,).
-        """
-        if cum_rewards.numel() == 0 or self.max_episode_length is None:
+        sa_batch = sa_batch.detach().to(torch.float32).cpu().reshape(-1, self.dim)
+        mcq_batch = mcq_batch.detach().to(torch.float32).cpu().reshape(-1)
+        self.last_candidate_count = int(sa_batch.shape[0])
+        self.last_admitted = int(sa_batch.shape[0])
+        if sa_batch.shape[0] == 0:
             return
-        n_episodes = cum_rewards.numel()
-        if self.label_mode == "l2_ball":
-            # End-state norms aren't available at the runner; use episode completeness
-            # as a proxy: good (1) = ran to max length, bad (0) = early terminated.
-            for c in (lengths >= self.max_episode_length).tolist():
-                self._rollout_bin_buffer.append(1 if c else 0)
-        elif self.label_mode == "reward_bins":
-            complete = lengths >= self.max_episode_length
-            for group_mask, base in ((~complete, 0), (complete, 2)):
-                idxs = group_mask.nonzero(as_tuple=True)[0]
-                if idxs.numel() == 0:
-                    continue
-                r = cum_rewards[idxs]
-                median = r.median()
-                for i in idxs:
-                    b = base + int(cum_rewards[i] >= median)
-                    self._rollout_bin_buffer.append(b)
-        # Refresh the reset pool after reset_pool_refresh_interval episodes.
-        if self._reset_pool is not None:
-            self._reset_pool_episodes_seen += n_episodes
-            if self._reset_pool_episodes_seen >= self.reset_pool_refresh_interval:
-                self._build_reset_pool()
-
-    def rollout_bin_fracs(self) -> dict[str, float]:
-        """Return per-bin outcome fracs over the last 100 completed episodes.
-
-        Returns empty dict if no episodes recorded or label_mode is unsupported.
-        """
-        if not self._rollout_bin_buffer:
-            return {}
-        if self.label_mode == "l2_ball":
-            n_bins, prefix = 2, "visitation_critic/outcome_bin"
-        elif self.label_mode == "reward_bins":
-            n_bins, prefix = 4, "visitation_critic/outcome_bin"
+        if self._buf_sa is None:
+            self._buf_sa = sa_batch.clone()
+            self._buf_mcq = mcq_batch.clone()
         else:
-            return {}
-        total = len(self._rollout_bin_buffer)
-        return {
-            f"{prefix}_{b}_frac": sum(1 for x in self._rollout_bin_buffer if x == b) / total
-            for b in range(n_bins)
-        }
+            self._buf_sa = torch.cat([self._buf_sa, sa_batch], dim=0)
+            self._buf_mcq = torch.cat([self._buf_mcq, mcq_batch], dim=0)
+        n = self._buf_sa.shape[0]
+        if n <= self.max_buffer:
+            return
+        # Uniform-random eviction: pick max_buffer indices to keep without replacement.
+        # Preserves older high-quality off-policy rows in expectation; unlike FIFO,
+        # which biases the buffer toward the most recent rollouts.
+        keep = torch.randperm(n, generator=self._cpu_gen)[: self.max_buffer]
+        keep, _ = torch.sort(keep)
+        self._buf_sa = self._buf_sa[keep]
+        self._buf_mcq = self._buf_mcq[keep]
 
-    def _compute_end_state_norms(self, end_states: torch.Tensor) -> torch.Tensor:
-        """Compute end-state L2 norm over all relative-state dimensions."""
-        return torch.linalg.norm(end_states, dim=1)
-
-    # --- Labeling ---
-
-    def _label_trajectories(self, data: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
-        """Label trajectories based on the configured label_mode.
-
-        Returns:
-            start_states: (N, state_dim)
-            labels: (N,) integer labels for discrete, (N, cond_dim) float for continuous.
+    def _top_mcq_subset(self) -> torch.Tensor | None:
+        """Return the (M', dim) slice of the buffer in the top-MCQ kNN region, or None
+        if there isn't enough data yet to train on.
         """
-        start_states = data["start_states"]
-        end_states = data["end_states"]
-        cum_rewards = data["cumulative_rewards"]
+        if self._buf_sa is None or self._buf_sa.shape[0] < 16:
+            return None
+        states = self._buf_sa[:, : self.state_dim]
+        mask = _local_topmcq_mask(states, self._buf_mcq, states, self._buf_mcq, self.k_nn, self.mcq_keep)
+        sa_prime = self._buf_sa[mask]
+        return sa_prime if sa_prime.shape[0] > 0 else None
 
-        if self.label_mode == "l2_ball":
-            # A trajectory is "good" (1) only if its end-state is near equilibrium
-            # AND it survived the full episode. End-state-norm alone is ambiguous
-            # — a fallen robot lying still and a balanced robot at rest both have
-            # small relative-state norm. Requiring full episode length disambiguates.
-            norms = self._compute_end_state_norms(end_states)
-            lengths = data["trajectory_lengths"]
-            complete = lengths >= self.max_episode_length
-            labels = ((norms < self.l2_radius) & complete).long()
-            return start_states, labels
+    def train_steps(self, n_steps: int = 80, batch_size: int = 256) -> float | None:
+        sa_prime = self._top_mcq_subset()
+        if sa_prime is None:
+            self.last_loss = None
+            self.last_kept = self.buffer_size
+            return None
+        sa_prime = sa_prime.to(self.device)
+        m_prime = sa_prime.shape[0]
+        losses: list[float] = []
+        self.model.train()
+        for _ in range(int(n_steps)):
+            idx = torch.randint(0, m_prime, (int(batch_size),), device=self.device, generator=self._torch_gen)
+            x1 = sa_prime[idx]
+            x0 = torch.randn(x1.shape, dtype=x1.dtype, device=self.device, generator=self._torch_gen)
+            tau = torch.rand(int(batch_size), 1, device=self.device, generator=self._torch_gen)
+            x_tau = (1.0 - tau) * x0 + tau * x1
+            target = x1 - x0
+            pred = self.model(x_tau, tau)
+            loss = ((pred - target) ** 2).mean()
+            self.opt.zero_grad()
+            loss.backward()
+            self.opt.step()
+            losses.append(float(loss.item()))
+        self.last_loss = float(np.mean(losses))
+        self.last_kept = self.buffer_size
+        return self.last_loss
 
-        elif self.label_mode == "reward_bins":
-            # Notebook-style 4 bins: fail-low=0, fail-high=1, succeed-low=2, succeed-high=3.
-            # First split by episode completeness (length == max_episode_length), then split
-            # each group by median cumulative reward.
-            lengths = data["trajectory_lengths"]
-            complete = lengths >= self.max_episode_length
-            labels = torch.zeros_like(lengths, dtype=torch.long)
-            for group_mask, base in ((~complete, 0), (complete, 2)):
-                idxs = group_mask.nonzero(as_tuple=True)[0]
-                if idxs.numel() == 0:
-                    continue
-                r = cum_rewards[idxs]
-                median = r.median()
-                high = (r >= median).long()
-                labels[idxs] = base + high
-            return start_states, labels
+    def _condition_tensors(
+        self, s_obs: torch.Tensor, a_cond: torch.Tensor, num_samples: int
+    ) -> tuple[torch.Tensor, torch.Tensor, int]:
+        num_samples = max(1, int(num_samples))
+        s_obs = s_obs.to(device=self.device, dtype=torch.float32).reshape(-1, self.state_dim)
+        a_cond = a_cond.to(device=self.device, dtype=torch.float32).reshape(-1, self.act_dim)
+        x_clean = torch.cat([s_obs, a_cond], dim=-1)
+        x_clean_rep = x_clean.repeat_interleave(num_samples, dim=0)
+        return x_clean, x_clean_rep, num_samples
 
-        elif self.label_mode == "continuous_reward":
-            r_min, r_max = cum_rewards.min(), cum_rewards.max()
-            if r_max - r_min > 1e-8:
-                r_norm = (cum_rewards - r_min) / (r_max - r_min)
+    def _euler_integrate(
+        self,
+        x: torch.Tensor,
+        tau_start: float | torch.Tensor,
+        tau_end: float | torch.Tensor,
+        n_steps: int,
+        state_clamp: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        n_steps = max(1, int(n_steps))
+        n = x.shape[0]
+        if not torch.is_tensor(tau_start):
+            tau_start = torch.full((n, 1), float(tau_start), device=self.device)
+        if not torch.is_tensor(tau_end):
+            tau_end = torch.full((n, 1), float(tau_end), device=self.device)
+        dt = (tau_end - tau_start) / n_steps
+        for k in range(n_steps):
+            tau = tau_start + (float(k) / n_steps) * (tau_end - tau_start)
+            if state_clamp is None:
+                x = x + dt * self.model(x, tau)
             else:
-                r_norm = torch.zeros_like(cum_rewards)
-            return start_states, r_norm.unsqueeze(-1)
+                x[:, : self.state_dim] = state_clamp
+                vel = self.model(x, tau)
+                x[:, self.state_dim :] = x[:, self.state_dim :] + dt * vel[:, self.state_dim :]
+                x[:, : self.state_dim] = state_clamp
+        return x
 
-        else:
-            raise ValueError(f"Unknown label_mode: {self.label_mode}")
+    @torch.no_grad()
+    def sample_sdedit(
+        self, s_obs: torch.Tensor, a_cond: torch.Tensor, tau: float = 0.5, num_samples: int = 300, n_steps: int = 50
+    ) -> torch.Tensor:
+        if not 0.0 <= float(tau) <= 1.0:
+            raise ValueError(f"vc_tau must be in [0, 1], got {tau}")
+        self.model.eval()
+        x_clean, x_clean_rep, num_samples = self._condition_tensors(s_obs, a_cond, num_samples)
+        eps = torch.randn(x_clean_rep.shape, dtype=x_clean_rep.dtype, device=self.device, generator=self._torch_gen)
+        x = (1.0 - tau) * eps + tau * x_clean_rep
+        x = self._euler_integrate(x, tau, 1.0, n_steps)
+        return x.reshape(x_clean.shape[0], num_samples, self.dim)
 
-    # --- Deterministic trajectory collection ---
+    @torch.no_grad()
+    def sample_gode(
+        self,
+        s_obs: torch.Tensor,
+        a_cond: torch.Tensor,
+        sigma: float = 0.2,
+        tau: float = 0.5,
+        num_samples: int = 300,
+        n_steps: int = 50,
+    ) -> torch.Tensor:
+        if not 0.0 <= float(tau) <= 1.0:
+            raise ValueError(f"vc_tau must be in [0, 1], got {tau}")
+        self.model.eval()
+        x_clean, x_clean_rep, num_samples = self._condition_tensors(s_obs, a_cond, num_samples)
+        eps = torch.randn(x_clean_rep.shape, dtype=x_clean_rep.dtype, device=self.device, generator=self._torch_gen)
+        x = x_clean_rep + sigma * eps
+        x = self._euler_integrate(x, tau, 1.0, n_steps)
+        return x.reshape(x_clean.shape[0], num_samples, self.dim)
 
-    def should_collect(self, iteration: int) -> bool:
-        """Check whether to collect a deterministic trajectory buffer this iteration.
+    @torch.no_grad()
+    def sample_inpainting(
+        self, s_obs: torch.Tensor, a_cond: torch.Tensor, num_samples: int = 300, n_steps: int = 50
+    ) -> torch.Tensor:
+        self.model.eval()
+        x_clean, x_clean_rep, num_samples = self._condition_tensors(s_obs, a_cond, num_samples)
+        x = torch.randn(x_clean_rep.shape, dtype=x_clean_rep.dtype, device=self.device, generator=self._torch_gen)
+        x = self._euler_integrate(x, 0.0, 1.0, n_steps, state_clamp=x_clean_rep[:, : self.state_dim])
+        return x.reshape(x_clean.shape[0], num_samples, self.dim)
 
-        Matches the CFM training cadence: collect at the first post-warmup iteration
-        that aligns with ``train_every_n_iters`` and then every period thereafter.
-        The runner may collect on a separate eval env so PPO rollout buffers are untouched.
-        """
-        if self.max_num_trains >= 0 and self._num_trains >= self.max_num_trains:
-            return False
-        return (
-            iteration >= self.num_warmup_iterations
-            and iteration % self.train_every_n_iters == 0
-        )
+    def state_dict(self) -> dict:
+        return {
+            "model": self.model.state_dict(),
+            "opt": self.opt.state_dict(),
+            "buf_sa": self._buf_sa,
+            "buf_mcq": self._buf_mcq,
+        }
 
-    @torch.inference_mode()
-    def collect_trajectories(self, env: VecEnv, actor: nn.Module) -> int:
-        """Collect deterministic trajectories into the buffer.
+    def load_state_dict(self, state: dict) -> None:
+        self.model.load_state_dict(state["model"])
+        self.opt.load_state_dict(state["opt"])
+        self._buf_sa = state.get("buf_sa")
+        self._buf_mcq = state.get("buf_mcq")
 
-        Clears the buffer, force-resets all envs so every trajectory begins from the
-        init-condition distribution, then steps env.step() with the deterministic
-        policy output until the buffer holds at least ``self.num_collect_trajectories``
-        completed trajectories. Honors ``self.disable_push_during_collection``.
-        Policy normalizers are NOT updated.
 
-        Returns:
-            Number of trajectories collected (>= num_collect_trajectories).
-        """
-        actor_was_training = actor.training
-        actor.eval()
-        self.buffer.clear()
-        if self.buffer._initialized:
-            self.buffer._step_counts.zero_()
-            self.buffer._cum_rewards.zero_()
+class AFlow(SAFlow):
+    """CFG conditional flow model for p(a | s). Inherits SAFlow's buffer."""
 
-        with self._maybe_disabled_push(env):
-            obs, _ = env.reset()
-            obs = obs.to(self.device)
-            # Record the initial reset observation so start_states capture the
-            # true initial condition (not the obs after the first step).
-            self.store_trajectory_data(obs, torch.zeros(env.num_envs, device=self.device), torch.zeros(env.num_envs, device=self.device))
-            while self.buffer.num_trajectories < self.num_collect_trajectories:
-                actions = actor(obs, stochastic_output=False)
-                obs, rewards, dones, _ = env.step(actions.to(env.device))
-                obs = obs.to(self.device)
-                rewards = rewards.to(self.device)
-                dones = dones.to(self.device)
-                self.store_trajectory_data(obs, rewards, dones)
+    def __init__(
+        self,
+        state_dim: int,
+        act_dim: int,
+        device: torch.device,
+        cfg_dropout: float = 0.1,
+        **kwargs,
+    ) -> None:
+        super().__init__(state_dim=state_dim, act_dim=act_dim, device=device, **kwargs)
+        lr = kwargs.get("lr", 1e-3)
+        self.model = CFGActionFlowMLP(
+            state_dim=self.state_dim, act_dim=self.act_dim, hidden_sizes=self.hidden_sizes
+        ).to(self.device)
+        self.opt = optim.Adam(self.model.parameters(), lr=float(lr))
+        self.cfg_dropout = float(cfg_dropout)
 
-        if actor_was_training:
-            actor.train()
-        return self.buffer.num_trajectories
-
-    @contextlib.contextmanager
-    def _maybe_disabled_push(self, env: VecEnv):
-        """Temporarily replace the push-robot event term's func with a no-op.
-
-        Uses func-replacement (rather than zeroing velocity_range) so the
-        ``push_velocity_curriculum`` can't reintroduce perturbations mid-collection.
-        """
-        if not self.disable_push_during_collection:
-            yield
-            return
-        try:
-            term_cfg = env.unwrapped.event_manager.get_term_cfg(self.collection_push_term_name)
-        except Exception:
-            yield
-            return
-        original_func = term_cfg.func
-        term_cfg.func = lambda env, env_ids, **kwargs: None
-        try:
-            yield
-        finally:
-            term_cfg.func = original_func
-
-    # --- Training ---
-
-    def should_train(self, iteration: int) -> bool:
-        """Check whether CFM training should happen at this iteration.
-
-        Assumes the buffer has been freshly filled via ``collect_trajectories``
-        just before this call.
-        """
-        if self.max_num_trains >= 0 and self._num_trains >= self.max_num_trains:
-            return False
-        return (
-            iteration >= self.num_warmup_iterations
-            and iteration % self.train_every_n_iters == 0
-            and self.buffer.num_trajectories > 0
-        )
-
-    def train(self) -> dict[str, float]:
-        """Train the CFM model on collected trajectory data.
-
-        Reinitializes the model from scratch each round to avoid loss stagnation
-        from stale weight basins when the trajectory distribution shifts.
-
-        Returns:
-            Dictionary of training metrics.
-        """
-        self._reinitialize_model()
-        self._num_trains += 1
-
-        data = self.buffer.get_tensors(self.device)
-        if not data:
-            return {"visitation_critic/cfm_loss": 0.0}
-
-        start_states, labels = self._label_trajectories(data)
-        num_samples = start_states.shape[0]
-
-        eps = 1e-3  # Avoid t=1
-
+    def train_steps(self, n_steps: int = 80, batch_size: int = 256) -> float | None:
+        # CFG-dropout training; SB3 trains on the whole buffer (no MCQ filter here).
+        if self._buf_sa is None or self._buf_sa.shape[0] < 16:
+            self.last_loss = None
+            self.last_kept = self.buffer_size
+            return None
+        sa = self._buf_sa.to(self.device)
+        m = sa.shape[0]
+        null_state = torch.full((self.state_dim,), _CFG_NULL_STATE_VAL, dtype=torch.float32, device=self.device)
+        losses: list[float] = []
         self.model.train()
-        total_loss = 0.0
-        cfm_loss_curve: list[float] = []
+        for _ in range(int(n_steps)):
+            idx = torch.randint(0, m, (int(batch_size),), device=self.device, generator=self._torch_gen)
+            s1 = sa[idx, : self.state_dim]
+            a1 = sa[idx, self.state_dim :]
+            dropout_mask = torch.rand(int(batch_size), device=self.device, generator=self._torch_gen) < self.cfg_dropout
+            s_cond = s1.clone()
+            s_cond[dropout_mask] = null_state
+            a0 = torch.randn(a1.shape, dtype=a1.dtype, device=self.device, generator=self._torch_gen)
+            tau = torch.rand(int(batch_size), 1, device=self.device, generator=self._torch_gen)
+            a_tau = (1.0 - tau) * a0 + tau * a1
+            target = a1 - a0
+            pred = self.model(a_tau, tau, s_cond)
+            loss = ((pred - target) ** 2).mean()
+            self.opt.zero_grad()
+            loss.backward()
+            self.opt.step()
+            losses.append(float(loss.item()))
+        self.last_loss = float(np.mean(losses))
+        self.last_kept = self.buffer_size
+        return self.last_loss
 
-        for step in range(self.num_train_steps):
-            # Linear warmup
-            if step < self.warmup_steps:
-                lr = self.learning_rate * (step + 1) / self.warmup_steps
-                for pg in self.optimizer.param_groups:
-                    pg["lr"] = lr
+    @torch.no_grad()
+    def sample_cfg(
+        self, s_obs: torch.Tensor, num_samples: int = 300, guidance_scale: float = 1.0, n_steps: int = 50
+    ) -> torch.Tensor:
+        """Returns (n_envs, num_samples, act_dim) — actions only."""
+        self.model.eval()
+        num_samples = max(1, int(num_samples))
+        s_obs = s_obs.to(device=self.device, dtype=torch.float32).reshape(-1, self.state_dim)
+        n_envs = s_obs.shape[0]
+        s_rep = s_obs.repeat_interleave(num_samples, dim=0)
+        null_s = torch.full_like(s_rep, _CFG_NULL_STATE_VAL)
+        a = torch.randn(n_envs * num_samples, self.act_dim, device=self.device, generator=self._torch_gen)
+        dt = 1.0 / int(n_steps)
+        for k in range(int(n_steps)):
+            tau = torch.full((n_envs * num_samples, 1), k * dt, device=self.device)
+            u_cond = self.model(a, tau, s_rep)
+            u_uncond = self.model(a, tau, null_s)
+            u = (1.0 - guidance_scale) * u_uncond + guidance_scale * u_cond
+            a = a + dt * u
+        return a.reshape(n_envs, num_samples, self.act_dim)
 
-            # Sample a batch
-            idx = torch.randint(0, num_samples, (self.batch_size,), device=self.device)
-            z = start_states[idx]
-            y = labels[idx]
 
-            # Classifier-free guidance dropout
-            if self.conditioning_type == "discrete":
-                drop_mask = torch.rand(self.batch_size, device=self.device) < self.cfg_dropout_prob
-                y = y.clone()
-                y[drop_mask] = self._null_label
-            elif self.conditioning_type == "continuous":
-                drop_mask = torch.rand(self.batch_size, device=self.device) < self.cfg_dropout_prob
-                null_emb = self.model.get_null_embedding(self.batch_size)
-                y = y.clone()
-                y[drop_mask] = null_emb[drop_mask]
+# =============================================================================
+# Optional side Q-critic (SAC twin-Q)
+# =============================================================================
 
-            # Sample time and interpolated state
-            t = torch.rand(self.batch_size, device=self.device) * (1.0 - eps)
-            x = self.path.sample_conditional_path(z, t)
 
-            # Forward pass
-            u_theta = self.model(x, t, y)
-            u_ref = self.path.conditional_vector_field(x, z, t)
+class TwinQNet(nn.Module):
+    """Two independent Q heads on (state, action). Min over heads is the conservative estimate."""
 
-            # MSE loss
-            loss = torch.mean((u_theta - u_ref) ** 2)
+    def __init__(self, state_dim: int, act_dim: int, hidden: Sequence[int] = (256, 256)) -> None:
+        super().__init__()
+        hidden = tuple(int(h) for h in hidden)
+        self.heads = nn.ModuleList()
+        for _ in range(2):
+            layers: list[nn.Module] = []
+            in_dim = state_dim + act_dim
+            for h in hidden:
+                layers.append(nn.Linear(in_dim, h))
+                layers.append(nn.ReLU())
+                in_dim = h
+            layers.append(nn.Linear(in_dim, 1))
+            self.heads.append(nn.Sequential(*layers))
 
+    def forward(self, obs: torch.Tensor, action: torch.Tensor) -> list[torch.Tensor]:
+        x = torch.cat([obs, action], dim=-1)
+        return [head(x) for head in self.heads]
+
+
+class QCritic:
+    """Side SAC-style critic with a torch-tensor ring replay. Not used unless q_mode != "off"."""
+
+    def __init__(
+        self,
+        state_dim: int,
+        act_dim: int,
+        device: torch.device,
+        net_arch: Sequence[int] = (256, 256),
+        lr: float = 3e-4,
+        buffer_size: int = 1_000_000,
+        batch_size: int = 256,
+        tau: float = 0.005,
+        gamma: float = 0.99,
+        seed: int = 0,
+    ) -> None:
+        self.device = torch.device(device)
+        self.state_dim = int(state_dim)
+        self.act_dim = int(act_dim)
+        self.batch_size = int(batch_size)
+        self.tau = float(tau)
+        self.gamma = float(gamma)
+        self.q_net = TwinQNet(self.state_dim, self.act_dim, hidden=net_arch).to(self.device)
+        self.q_net_target = TwinQNet(self.state_dim, self.act_dim, hidden=net_arch).to(self.device)
+        self.q_net_target.load_state_dict(self.q_net.state_dict())
+        for p in self.q_net_target.parameters():
+            p.requires_grad_(False)
+        self.optimizer = optim.Adam(self.q_net.parameters(), lr=float(lr))
+        # Replay buffer on CPU (typical SB3 replay)
+        self._capacity = int(buffer_size)
+        self._obs = torch.zeros(self._capacity, self.state_dim, dtype=torch.float32)
+        self._next_obs = torch.zeros(self._capacity, self.state_dim, dtype=torch.float32)
+        self._actions = torch.zeros(self._capacity, self.act_dim, dtype=torch.float32)
+        self._rewards = torch.zeros(self._capacity, 1, dtype=torch.float32)
+        self._dones = torch.zeros(self._capacity, 1, dtype=torch.float32)
+        self._pos = 0
+        self._size = 0
+        self._gen = torch.Generator().manual_seed(int(seed) + 13)
+        self.last_loss: float | None = None
+        self.last_target_q_mean: float | None = None
+
+    def size(self) -> int:
+        return int(self._size)
+
+    def add_transition(
+        self,
+        obs: torch.Tensor,
+        action: torch.Tensor,
+        reward: torch.Tensor,
+        next_obs: torch.Tensor,
+        done: torch.Tensor,
+    ) -> None:
+        obs = obs.detach().to(torch.float32).cpu().reshape(-1, self.state_dim)
+        next_obs = next_obs.detach().to(torch.float32).cpu().reshape(-1, self.state_dim)
+        action = action.detach().to(torch.float32).cpu().reshape(-1, self.act_dim)
+        reward = reward.detach().to(torch.float32).cpu().reshape(-1, 1)
+        done = done.detach().to(torch.float32).cpu().reshape(-1, 1)
+        n = obs.shape[0]
+        # Wrap-around write
+        end = self._pos + n
+        if end <= self._capacity:
+            sl = slice(self._pos, end)
+            self._obs[sl] = obs
+            self._next_obs[sl] = next_obs
+            self._actions[sl] = action
+            self._rewards[sl] = reward
+            self._dones[sl] = done
+        else:
+            first = self._capacity - self._pos
+            self._obs[self._pos :] = obs[:first]
+            self._next_obs[self._pos :] = next_obs[:first]
+            self._actions[self._pos :] = action[:first]
+            self._rewards[self._pos :] = reward[:first]
+            self._dones[self._pos :] = done[:first]
+            rem = n - first
+            self._obs[:rem] = obs[first:]
+            self._next_obs[:rem] = next_obs[first:]
+            self._actions[:rem] = action[first:]
+            self._rewards[:rem] = reward[first:]
+            self._dones[:rem] = done[first:]
+        self._pos = (self._pos + n) % self._capacity
+        self._size = min(self._size + n, self._capacity)
+
+    def train_steps(self, actor_mean_fn, n_steps: int = 1) -> float | None:
+        """`actor_mean_fn` maps a CPU obs tensor to a CPU action tensor (the policy's
+        deterministic mean), evaluated under torch.no_grad. Mirrors SB3 VCQCritic.train_step
+        but de-couples the actor type (rsl_rl actors take TensorDicts, not flat tensors).
+        """
+        if self._size < self.batch_size:
+            self.last_loss = None
+            return None
+        losses: list[float] = []
+        target_q_means: list[float] = []
+        for _ in range(int(n_steps)):
+            idx = torch.randint(0, self._size, (self.batch_size,), generator=self._gen)
+            obs_b = self._obs[idx].to(self.device)
+            next_obs_b = self._next_obs[idx].to(self.device)
+            actions_b = self._actions[idx].to(self.device)
+            rewards_b = self._rewards[idx].to(self.device)
+            dones_b = self._dones[idx].to(self.device)
+            with torch.no_grad():
+                next_actions = actor_mean_fn(next_obs_b)
+                next_q_heads = self.q_net_target(next_obs_b, next_actions)
+                next_q_stack = torch.cat(next_q_heads, dim=1)
+                next_q_min, _ = torch.min(next_q_stack, dim=1, keepdim=True)
+                target_q = rewards_b + (1.0 - dones_b) * self.gamma * next_q_min
+                target_q_means.append(float(target_q.mean().item()))
+            current_q_heads = self.q_net(obs_b, actions_b)
+            loss = 0.5 * sum(F.mse_loss(q, target_q) for q in current_q_heads)
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
-
-            loss_value = loss.item()
-
-            total_loss += loss_value
-            cfm_loss_curve.append(loss_value)
-
-        self._trained = True
-        avg_loss = total_loss / max(self.num_train_steps, 1)
-        self._build_reset_pool()
-        self._wandb_media = self._build_wandb_media(
-            data, start_states, data["end_states"], labels, cfm_loss_curve
-        )
-
-        # Clear the buffer so next training round uses fresh on-policy data
-        self.buffer.clear()
-
-        metrics: dict[str, float] = {"visitation_critic/cfm_loss": avg_loss}
-        if self.label_mode == "reward_bins":
-            for b in range(4):
-                frac = (labels == b).float().mean().item()
-                metrics[f"visitation_critic/bin_{b}_frac"] = frac
-        return metrics
-
-    @property
-    def wandb_media(self) -> dict[str, Any]:
-        """Return media payload for W&B logging from the latest VC update."""
-        return self._wandb_media
-
-    # --- Generation ---
-
-    @property
-    def is_trained(self) -> bool:
-        return self._trained
-
-    def generate_reset_states(self, num_states: int) -> torch.Tensor:
-        """Sample reset states from the pre-generated pool.
-
-        After ``train()`` is called, the pool is built once via ``_build_reset_pool``
-        and subsequently sampled with random replacement — O(1) per call. The pool is
-        refreshed automatically after ``reset_pool_refresh_interval`` episodes or
-        whenever a new VC model is trained.
-
-        Before the pool is ready (untrained model), falls back to a single ODE solve.
-
-        Args:
-            num_states: Number of states to draw.
-
-        Returns:
-            Selected states, shape (num_states, state_dim).
-        """
-        if num_states == 0:
-            return torch.zeros(0, self.state_dim, device=self.device)
-        if self._reset_pool is not None:
-            idx = torch.randint(0, self._reset_pool.shape[0], (num_states,), device=self.device)
-            return self._reset_pool[idx]
-        # Fallback: ODE solve (only reached before first train() call).
-        return self._generate_states_via_ode(num_states, self.reset_condition_label if self.conditioning_type == "discrete" else None)
+            with torch.no_grad():
+                for p, p_targ in zip(self.q_net.parameters(), self.q_net_target.parameters()):
+                    p_targ.data.mul_(1.0 - self.tau).add_(self.tau * p.data)
+            losses.append(float(loss.item()))
+        self.last_loss = float(np.mean(losses))
+        self.last_target_q_mean = float(np.mean(target_q_means)) if target_q_means else None
+        return self.last_loss
 
     @torch.no_grad()
-    def _generate_states_via_ode(self, num_states: int, label: int | None) -> torch.Tensor:
-        """Run a single ODE solve to generate ``num_states`` states (slow path)."""
-        self.model.eval()
-        x0 = torch.randn(num_states, self.state_dim, device=self.device)
-        if self.conditioning_type == "discrete":
-            cond_label = label if label is not None else self.reset_condition_label
-            cond = torch.full((num_states,), cond_label, dtype=torch.long, device=self.device)
-            null_cond = torch.full((num_states,), self._null_label, dtype=torch.long, device=self.device)
-        elif self.conditioning_type == "continuous":
-            cond = torch.full((num_states, self.model.cond_dim), self.reset_condition_value, device=self.device)
-            null_cond = self.model.get_null_embedding(num_states)
-        else:
-            raise ValueError(f"Unknown conditioning_type: {self.conditioning_type}")
-        gs = self.guidance_scale
-        def guided_fn(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-            return cfg_guided_velocity(self.model, x, t, gs, cond=cond, null_cond=null_cond)
-        generated = self.solver.solve(x0, guided_fn, num_steps=self.num_euler_steps)
-        self.model.train()
-        return generated
+    def q_min(self, obs: torch.Tensor, action: torch.Tensor) -> torch.Tensor:
+        obs = obs.to(device=self.device, dtype=torch.float32)
+        action = action.to(device=self.device, dtype=torch.float32)
+        q_heads = self.q_net(obs, action)
+        stacked = torch.cat(q_heads, dim=-1)
+        q_min, _ = torch.min(stacked, dim=-1)
+        return q_min
 
-    @torch.no_grad()
-    def generate_states_for_label(self, num_states: int, label: int) -> torch.Tensor:
-        """Generate states conditioned on a specific discrete label."""
-        if self.conditioning_type != "discrete":
-            raise ValueError("generate_states_for_label is only supported for discrete conditioning.")
-
-        self.model.eval()
-        x0 = torch.randn(num_states, self.state_dim, device=self.device)
-        cond = torch.full((num_states,), label, dtype=torch.long, device=self.device)
-        null_cond = torch.full((num_states,), self._null_label, dtype=torch.long, device=self.device)
-
-        def guided_fn(x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-            return cfg_guided_velocity(
-                self.model, x, t, self.guidance_scale, cond=cond, null_cond=null_cond
-            )
-
-        generated = self.solver.solve(x0, guided_fn, num_steps=self.num_euler_steps)
-        self.model.train()
-        return generated
-
-    @staticmethod
-    def _state_roll_pitch(state: torch.Tensor) -> torch.Tensor:
-        """Extract true Euler roll/pitch (ZYX convention) from a relative-state tensor.
-
-        The rel-qpos block stores orientation as an axis-angle rotation vector in
-        indices [3, 4, 5] (output of ``differentiate_qpos``). Plotting these raw
-        components approximates roll/pitch only for small tilts; past ~30° the
-        rotvec-x/y components diverge from Euler roll/pitch. This helper converts
-        rotvec -> quaternion -> Euler so plot axes match the physical quantities.
-
-        Args:
-            state: (N, state_dim) relative-state tensor.
-
-        Returns:
-            (N, 2) tensor of [roll, pitch] in radians.
-        """
-        rotvec = state[:, 3:6]
-        angle = torch.linalg.norm(rotvec, dim=-1, keepdim=True).clamp(min=1e-10)
-        axis = rotvec / angle
-        half = angle * 0.5
-        w = torch.cos(half).squeeze(-1)
-        xyz = axis * torch.sin(half)
-        x, y, z = xyz[:, 0], xyz[:, 1], xyz[:, 2]
-        roll = torch.atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
-        pitch = torch.asin(torch.clamp(2.0 * (w * y - z * x), -1.0, 1.0))
-        return torch.stack([roll, pitch], dim=-1)
-
-    def _build_wandb_media(
-        self,
-        data: dict[str, torch.Tensor],
-        start_states: torch.Tensor,
-        end_states: torch.Tensor,
-        labels: torch.Tensor,
-        cfm_loss_curve: list[float],
-    ) -> dict[str, Any]:
-        """Build W&B media payload with VC diagnostic scatter plots."""
-
-        rel_qpos_dim = self.cfg.get("rel_qpos_dim", self.state_dim // 2)
-        roll_rate_idx = rel_qpos_dim + 3
-        pitch_rate_idx = rel_qpos_dim + 4
-        if pitch_rate_idx >= self.state_dim:
-            return {}
-
-        start_cpu = start_states.detach().cpu()
-        end_cpu = end_states.detach().cpu()
-        labels_cpu = labels.detach().cpu() if isinstance(labels, torch.Tensor) else None
-        scatter_count = max(self.min_scatter_states, 500)
-        media: dict[str, Any] = {}
-        # Resolve class labels and names for discrete conditioning.
-        class_names: list[str] = []
-        class_values: list[int] = []
-        if self.conditioning_type == "discrete" and labels_cpu is not None:
-            num_classes = int(self.cfg.get("num_classes", 2))
-            class_names_cfg = self.cfg.get("class_names", None)
-            if isinstance(class_names_cfg, (list, tuple)) and len(class_names_cfg) >= num_classes:
-                class_names = [str(name) for name in class_names_cfg[:num_classes]]
-            elif self.label_mode == "l2_ball" and num_classes >= 2:
-                class_names = ["Bad", "Good"] + [f"Class_{i}" for i in range(2, num_classes)]
-            else:
-                class_names = [f"Class_{i}" for i in range(num_classes)]
-            class_values = list(range(num_classes))
-        else:
-            class_names = ["all"]
-            class_values = [0]
-
-        # Build per-class sampled dataset tensors for start and end states.
-        # Track each class's share of the full dataset for legend percentages.
-        total_count = start_cpu.shape[0]
-        sampled_by_class: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
-        class_pct: dict[int, float] = {}
-        for class_id in class_values:
-            if self.conditioning_type == "discrete" and labels_cpu is not None:
-                class_mask = labels_cpu == class_id
-                start_cls = start_cpu[class_mask]
-                end_cls = end_cpu[class_mask]
-                class_pct[class_id] = 100.0 * class_mask.float().mean().item() if total_count > 0 else 0.0
-            else:
-                start_cls = start_cpu
-                end_cls = end_cpu
-                class_pct[class_id] = 100.0
-            if start_cls.shape[0] == 0:
-                continue
-            n = max(scatter_count, 500)
-            idx = torch.randint(0, start_cls.shape[0], (n,))
-            sampled_by_class[class_id] = (start_cls[idx], end_cls[idx])
-
-        # Dataset plot: 2x2 grid (row1 start, row2 end; col1 roll, col2 pitch), class-colored.
-        fig_dataset, axes = plt.subplots(2, 2, figsize=(12, 9))
-        colors = plt.cm.tab10
-        for i, class_id in enumerate(class_values):
-            if class_id not in sampled_by_class:
-                continue
-            start_cls, end_cls = sampled_by_class[class_id]
-            start_rp = self._state_roll_pitch(start_cls)
-            end_rp = self._state_roll_pitch(end_cls)
-            name = class_names[class_id] if class_id < len(class_names) else f"class_{class_id}"
-            pct = class_pct.get(class_id, 0.0)
-            count = int(round(pct / 100.0 * total_count))
-            class_label = f"{name} ({class_id}): {pct:.1f}% of {total_count} ({count})"
-            c = colors(i % 10)
-            axes[0, 0].scatter(
-                start_rp[:, 0].numpy(),
-                start_cls[:, roll_rate_idx].numpy(),
-                alpha=0.28,
-                s=6,
-                color=c,
-                label=class_label,
-            )
-            axes[0, 1].scatter(
-                start_rp[:, 1].numpy(),
-                start_cls[:, pitch_rate_idx].numpy(),
-                alpha=0.28,
-                s=6,
-                color=c,
-                label=class_label,
-            )
-            axes[1, 0].scatter(
-                end_rp[:, 0].numpy(),
-                end_cls[:, roll_rate_idx].numpy(),
-                alpha=0.28,
-                s=6,
-                color=c,
-                label=class_label,
-            )
-            axes[1, 1].scatter(
-                end_rp[:, 1].numpy(),
-                end_cls[:, pitch_rate_idx].numpy(),
-                alpha=0.28,
-                s=6,
-                color=c,
-                label=class_label,
-            )
-        axes[0, 0].set_title("Roll phase, start state")
-        axes[0, 1].set_title("Pitch phase, start state")
-        axes[1, 0].set_title("Roll phase, end state")
-        axes[1, 1].set_title("Pitch phase, end state")
-        axes[0, 0].set_xlabel(r"$\phi$ (rad)")
-        axes[0, 0].set_ylabel(r"$\dot{\phi}$ (rad/s)")
-        axes[0, 1].set_xlabel(r"$\theta$ (rad)")
-        axes[0, 1].set_ylabel(r"$\dot{\theta}$ (rad/s)")
-        axes[1, 0].set_xlabel(r"$\phi$ (rad)")
-        axes[1, 0].set_ylabel(r"$\dot{\phi}$ (rad/s)")
-        axes[1, 1].set_xlabel(r"$\theta$ (rad)")
-        axes[1, 1].set_ylabel(r"$\dot{\theta}$ (rad/s)")
-        for ax in axes.flat:
-            ax.grid(alpha=0.2)
-            ax.legend(loc="best")
-        fig_dataset.suptitle(
-            f"Dataset Trajectory States (N={total_count} total, ~{scatter_count}/class sampled)"
-        )
-        media["visitation_critic/dataset_phase_space"] = fig_dataset
-
-        # End-state norm histogram with radius threshold line (l2_ball labeling only).
-        if self.label_mode == "l2_ball" and total_count > 0:
-            end_norms = self._compute_end_state_norms(end_cpu).numpy()
-            good_pct = 100.0 * (end_norms < self.l2_radius).mean()
-            fig_hist, ax_hist = plt.subplots(1, 1, figsize=(10, 5))
-            ax_hist.hist(
-                end_norms,
-                bins=80,
-                color="gray",
-                alpha=0.8,
-                edgecolor="black",
-                linewidth=0.3,
-            )
-            ax_hist.axvline(
-                self.l2_radius,
-                color="tab:red",
-                linestyle="--",
-                lw=2.0,
-                label=f"l2_radius={self.l2_radius:.2f}  (good={good_pct:.1f}%)",
-            )
-            ax_hist.set_xlabel(r"$\|$X_T$\|$  (relative_state L2 norm)")
-            ax_hist.set_ylabel("count")
-            ax_hist.set_title(
-                f"End-state norm histogram  (N={total_count})"
-            )
-            ax_hist.grid(alpha=0.2)
-            ax_hist.legend(loc="best")
-            fig_hist.tight_layout()
-            media["visitation_critic/end_state_norm_histogram"] = fig_hist
-
-        # Cumulative reward histogram split by completeness (reward_bins mode only).
-        if self.label_mode == "reward_bins" and total_count > 0 and "trajectory_lengths" in data:
-            lengths_np = data["trajectory_lengths"].cpu().numpy()
-            rewards_np = data["cumulative_rewards"].cpu().numpy()
-            complete_mask = lengths_np >= self.max_episode_length
-            fail_rewards = rewards_np[~complete_mask]
-            succ_rewards = rewards_np[complete_mask]
-            fig_rew, ax_rew = plt.subplots(1, 1, figsize=(10, 5))
-            bins = 60
-            if fail_rewards.size > 0:
-                fail_median = float(torch.tensor(fail_rewards).median())
-                ax_rew.hist(
-                    fail_rewards, bins=bins, alpha=0.6, color="tab:red",
-                    label=f"fail ({len(fail_rewards)}, {100*len(fail_rewards)/total_count:.0f}%)",
-                )
-                ax_rew.axvline(
-                    fail_median, color="tab:red", linestyle="--", lw=1.5,
-                    label=f"fail median={fail_median:.2f}",
-                )
-            if succ_rewards.size > 0:
-                succ_median = float(torch.tensor(succ_rewards).median())
-                ax_rew.hist(
-                    succ_rewards, bins=bins, alpha=0.6, color="tab:blue",
-                    label=f"complete ({len(succ_rewards)}, {100*len(succ_rewards)/total_count:.0f}%)",
-                )
-                ax_rew.axvline(
-                    succ_median, color="tab:blue", linestyle="--", lw=1.5,
-                    label=f"complete median={succ_median:.2f}",
-                )
-            ax_rew.set_xlabel("Cumulative episode reward")
-            ax_rew.set_ylabel("count")
-            ax_rew.set_title(f"Reward distribution by completeness (N={total_count})")
-            ax_rew.grid(alpha=0.2)
-            ax_rew.legend(loc="best")
-            fig_rew.tight_layout()
-            media["visitation_critic/reward_histogram"] = fig_rew
-
-        # Dataset overlay plot: 1x2 (roll and pitch), start vs end distributions.
-        start_overlay = start_cpu
-        end_overlay = end_cpu
-        if start_overlay.shape[0] > 0:
-            overlay_count = max(self.min_scatter_states, 500)
-            s_idx = torch.randint(0, start_overlay.shape[0], (overlay_count,))
-            e_idx = torch.randint(0, end_overlay.shape[0], (overlay_count,))
-            start_overlay = start_overlay[s_idx]
-            end_overlay = end_overlay[e_idx]
-            start_rp_overlay = self._state_roll_pitch(start_overlay)
-            end_rp_overlay = self._state_roll_pitch(end_overlay)
-            fig_overlay, ax_overlay = plt.subplots(1, 2, figsize=(12, 5))
-            # Roll phase space
-            ax_overlay[0].scatter(
-                start_rp_overlay[:, 0].numpy(),
-                start_overlay[:, roll_rate_idx].numpy(),
-                alpha=0.25,
-                s=7,
-                color="royalblue",
-                label="start state",
-            )
-            ax_overlay[0].scatter(
-                end_rp_overlay[:, 0].numpy(),
-                end_overlay[:, roll_rate_idx].numpy(),
-                alpha=0.25,
-                s=7,
-                color="crimson",
-                label="end state",
-            )
-            ax_overlay[0].set_title("Roll phase space: start vs end")
-            ax_overlay[0].set_xlabel(r"$\phi$ (rad)")
-            ax_overlay[0].set_ylabel(r"$\dot{\phi}$ (rad/s)")
-            ax_overlay[0].grid(alpha=0.2)
-            ax_overlay[0].legend(loc="best")
-            # Pitch phase space
-            ax_overlay[1].scatter(
-                start_rp_overlay[:, 1].numpy(),
-                start_overlay[:, pitch_rate_idx].numpy(),
-                alpha=0.25,
-                s=7,
-                color="royalblue",
-                label="start state",
-            )
-            ax_overlay[1].scatter(
-                end_rp_overlay[:, 1].numpy(),
-                end_overlay[:, pitch_rate_idx].numpy(),
-                alpha=0.25,
-                s=7,
-                color="crimson",
-                label="end state",
-            )
-            ax_overlay[1].set_title("Pitch phase space: start vs end")
-            ax_overlay[1].set_xlabel(r"$\theta$ (rad)")
-            ax_overlay[1].set_ylabel(r"$\dot{\theta}$ (rad/s)")
-            ax_overlay[1].grid(alpha=0.2)
-            ax_overlay[1].legend(loc="best")
-            fig_overlay.suptitle("Trajectory Dataset Start/End Overlay")
-            media["visitation_critic/dataset_start_end_overlay"] = fig_overlay
-
-        # Full CFM inner-loop loss curve for this policy iteration.
-        if cfm_loss_curve:
-            fig_curve, ax_curve = plt.subplots(figsize=(7, 4))
-            ax_curve.plot(cfm_loss_curve, color="royalblue", linewidth=1.5)
-            ax_curve.set_title("CFM Inner-Loop Loss Curve")
-            ax_curve.set_xlabel("CFM optimization step")
-            ax_curve.set_ylabel("MSE loss")
-            ax_curve.grid(alpha=0.25)
-            media["visitation_critic/cfm_loss_curve"] = fig_curve
-
-        # Discrete class-conditioned generated state scatter: 1x2 grid, start states only.
-        if self.conditioning_type == "discrete":
-            num_classes = int(self.cfg.get("num_classes", 2))
-            fig_cls, ax_cls = plt.subplots(1, 2, figsize=(12, 5))
-            for cls in range(num_classes):
-                samples = self.generate_states_for_label(
-                    max(self.generated_states_per_class, 500), cls
-                ).detach().cpu()
-                samples_rp = self._state_roll_pitch(samples)
-                class_label = f"{class_names[cls]} ({cls})" if cls < len(class_names) else f"class_{cls}"
-                color = colors(cls % 10)
-                ax_cls[0].scatter(
-                    samples_rp[:, 0].numpy(),
-                    samples[:, roll_rate_idx].numpy(),
-                    alpha=0.25,
-                    s=6,
-                    color=color,
-                    label=class_label,
-                )
-                ax_cls[1].scatter(
-                    samples_rp[:, 1].numpy(),
-                    samples[:, pitch_rate_idx].numpy(),
-                    alpha=0.25,
-                    s=6,
-                    color=color,
-                    label=class_label,
-                )
-            ax_cls[0].set_title("Roll phase, generated start state")
-            ax_cls[0].set_xlabel(r"$\phi$ (rad)")
-            ax_cls[0].set_ylabel(r"$\dot{\phi}$ (rad/s)")
-            ax_cls[1].set_title("Pitch phase, generated start state")
-            ax_cls[1].set_xlabel(r"$\theta$ (rad)")
-            ax_cls[1].set_ylabel(r"$\dot{\theta}$ (rad/s)")
-            for ax in ax_cls:
-                ax.grid(alpha=0.2)
-                ax.legend(loc="best")
-            fig_cls.suptitle("Generated Start States by Class")
-            media["visitation_critic/generated_states_by_class"] = fig_cls
-
-        # Per-bin nearest-neighbor outcome bar plot (reward_bins only).
-        # For each conditioning bin b, generate N states, find each's nearest neighbor
-        # in the labeled dataset, and show the outcome-bin distribution.
-        if self.label_mode == "reward_bins" and isinstance(labels, torch.Tensor):
-            n_per_bin = 500
-            fig_nn, axes_nn = plt.subplots(1, 4, figsize=(14, 3.5), sharey=True)
-            start_ds = start_states.detach()  # (N, state_dim) on device
-            labels_ds = labels.detach()  # (N,) on device
-            bar_colors = [colors(k % 10) for k in range(4)]
-            for b in range(4):
-                gen = self.generate_states_for_label(n_per_bin, b)  # (n, state_dim)
-                # cdist on device; size is 500 x N (N up to ~10k) — cheap.
-                d = torch.cdist(gen, start_ds)
-                nn_labels = labels_ds[d.argmin(dim=1)]
-                hist = [
-                    (nn_labels == k).float().mean().item() * 100.0 for k in range(4)
-                ]
-                axes_nn[b].bar(range(4), hist, color=bar_colors)
-                axes_nn[b].set_title(f"cond bin = {b}")
-                axes_nn[b].set_xticks(range(4))
-                axes_nn[b].set_xlabel("outcome bin")
-                axes_nn[b].set_ylim(0, 100)
-                for k, pct in enumerate(hist):
-                    axes_nn[b].text(
-                        k, pct + 1.5, f"{pct:.0f}%", ha="center", va="bottom", fontsize=8
-                    )
-            axes_nn[0].set_ylabel("% of NN in outcome bin")
-            fig_nn.suptitle(
-                "Generated-state NN outcome distribution, per conditioning bin"
-            )
-            fig_nn.tight_layout()
-            media["visitation_critic/nn_outcome_by_cond_bin"] = fig_nn
-
-        return media
-
-    # --- Persistence ---
-
-    def save(self) -> dict:
-        """Return state dict for checkpointing."""
+    def state_dict(self) -> dict:
         return {
-            "vc_model_state": self.model.state_dict(),
-            "vc_optimizer_state": self.optimizer.state_dict(),
-            "vc_trained": self._trained,
+            "q_net": self.q_net.state_dict(),
+            "q_net_target": self.q_net_target.state_dict(),
+            "optimizer": self.optimizer.state_dict(),
+            "obs": self._obs,
+            "next_obs": self._next_obs,
+            "actions": self._actions,
+            "rewards": self._rewards,
+            "dones": self._dones,
+            "pos": self._pos,
+            "size": self._size,
         }
 
-    def load(self, state_dict: dict) -> None:
-        """Restore from checkpoint."""
-        if "vc_model_state" in state_dict:
-            self.model.load_state_dict(state_dict["vc_model_state"])
-        if "vc_optimizer_state" in state_dict:
-            self.optimizer.load_state_dict(state_dict["vc_optimizer_state"])
-        self._trained = state_dict.get("vc_trained", False)
+    def load_state_dict(self, state: dict) -> None:
+        self.q_net.load_state_dict(state["q_net"])
+        self.q_net_target.load_state_dict(state["q_net_target"])
+        self.optimizer.load_state_dict(state["optimizer"])
+        self._obs = state["obs"]
+        self._next_obs = state["next_obs"]
+        self._actions = state["actions"]
+        self._rewards = state["rewards"]
+        self._dones = state["dones"]
+        self._pos = int(state["pos"])
+        self._size = int(state["size"])
+
+
+# =============================================================================
+# Alpha schedule
+# =============================================================================
+
+
+def resolve_alpha_schedule(alpha):
+    """Return a callable iter -> alpha. Accepts float, int, or dict spec.
+
+    Dict form: {"alpha": float, "mode": "constant"|"linear_decay", "stop_iter": int}.
+    """
+    if isinstance(alpha, (int, float)):
+        a0 = float(alpha)
+        return lambda it: a0
+    if isinstance(alpha, dict):
+        a0 = float(alpha["alpha"])
+        mode = alpha.get("mode", "constant")
+        if mode == "constant":
+            return lambda it: a0
+        if mode == "linear_decay":
+            stop = int(alpha["stop_iter"])
+
+            def _sched(it: int) -> float:
+                if stop <= 0 or it >= stop:
+                    return 0.0
+                return a0 * max(0.0, 1.0 - it / stop)
+
+            return _sched
+        raise ValueError(f"unknown alpha mode: {mode!r}")
+    raise TypeError(f"alpha must be float or dict, got {type(alpha).__name__}")
+
+
+# =============================================================================
+# Top-level orchestrator
+# =============================================================================
+
+
+class VisitationCritic:
+    """Owns the flow model, optional Q-critic, per-env episode buffers, and the alpha schedule.
+
+    Iteration-driven (rsl_rl works at iteration granularity; SB3 works at env-step granularity).
+    The envelope and schedule below use iteration counts.
+    """
+
+    def __init__(
+        self,
+        cfg: dict,
+        state_dim: int,
+        act_dim: int,
+        obs_groups: dict[str, list[str]],
+        num_envs: int,
+        device: torch.device | str,
+    ) -> None:
+        self.cfg = cfg
+        self.device = torch.device(device)
+        self.state_dim = int(state_dim)
+        self.act_dim = int(act_dim)
+        self.num_envs = int(num_envs)
+        # Reuse the actor's obs groups (concatenated in order).
+        self.actor_groups: list[str] = list(obs_groups["actor"])
+
+        self.sample_method = str(cfg.get("sample_method", "sdedit"))
+        if self.sample_method not in {"sdedit", "gode", "inpainting", "cfg"}:
+            raise ValueError(f"unknown sample_method: {self.sample_method!r}")
+        self.tau = float(cfg.get("tau", 0.9))
+        self.sigma = float(cfg.get("sigma", 0.2))
+        self.guidance_scale = float(cfg.get("guidance_scale", 1.0))
+        self.cfg_dropout = float(cfg.get("cfg_dropout", 0.1))
+        self.num_samples = int(cfg.get("num_samples", 50))
+        self.policy_trust_std = float(cfg.get("policy_trust_std", 3.0))
+        self.warmup_iters = int(cfg.get("warmup_iters", 250))
+        self.decay_start_iter: int | None = (
+            None if cfg.get("decay_start_iter") is None else int(cfg["decay_start_iter"])
+        )
+        self.stop_iter: int | None = None if cfg.get("stop_iter") is None else int(cfg["stop_iter"])
+        self.model_train_steps = int(cfg.get("model_train_steps", 80))
+        self.model_train_every = max(1, int(cfg.get("model_train_every", 1)))
+        self.model_batch_size = int(cfg.get("model_batch_size", 256))
+        self.model_lambda_steps = int(cfg.get("model_lambda_steps", 50))
+        self.gamma_mcq = float(cfg.get("gamma_mcq", 0.99))
+        self._alpha_schedule = resolve_alpha_schedule(cfg.get("alpha", 0.5))
+
+        flow_kwargs = dict(
+            state_dim=self.state_dim,
+            act_dim=self.act_dim,
+            device=self.device,
+            lr=float(cfg.get("model_lr", 1e-3)),
+            hidden_sizes=tuple(int(h) for h in cfg.get("model_net", (128, 128, 128))),
+            max_buffer=int(cfg.get("buffer_size", 100_000)),
+            k_nn=int(cfg.get("q_filter_k", K_NN_FILTER)),
+            mcq_percentile=float(cfg.get("q_top_fraction", 0.25)) * 100.0,
+            seed=int(cfg.get("seed", 0)),
+        )
+        if self.sample_method == "cfg":
+            self.flow: SAFlow = AFlow(cfg_dropout=self.cfg_dropout, **flow_kwargs)
+        else:
+            self.flow = SAFlow(**flow_kwargs)
+
+        self.q_mode = str(cfg.get("q_mode", "off"))
+        if self.q_mode not in {"off", "selection", "analysis"}:
+            raise ValueError(f"unknown q_mode: {self.q_mode!r}")
+        self.q_train_steps = int(cfg.get("q_train_steps", 300))
+        self.q_critic: QCritic | None = None
+        if self.q_mode != "off":
+            self.q_critic = QCritic(
+                state_dim=self.state_dim,
+                act_dim=self.act_dim,
+                device=self.device,
+                net_arch=tuple(int(h) for h in cfg.get("q_net", (256, 256))),
+                lr=float(cfg.get("q_lr", 3e-4)),
+                buffer_size=int(cfg.get("q_replay_size", 1_000_000)),
+                batch_size=int(cfg.get("q_batch_size", 256)),
+                tau=float(cfg.get("q_tau", 0.005)),
+                gamma=float(cfg.get("gamma", 0.99)),
+                seed=int(cfg.get("seed", 0)),
+            )
+
+        # Per-env pending-episode buffers (CPU-side python lists of tensors).
+        self._pending_obs: list[list[torch.Tensor]] = [[] for _ in range(self.num_envs)]
+        self._pending_actions: list[list[torch.Tensor]] = [[] for _ in range(self.num_envs)]
+        self._pending_rewards: list[list[float]] = [[] for _ in range(self.num_envs)]
+        # EMA of true single-step state distances, for the sdedit/gode manifold gate.
+        self._step_dist_ema: float | None = None
+        self._step_dist_ema_alpha: float = 0.01
+        # Latest-step metrics for logging
+        self.last_alpha = 0.0
+        self.last_blend_zscore = 0.0
+        self.last_blend_tail_frac = 0.0
+        # Latest action selection diagnostics
+        self.last_vc_active_frac = 0.0
+
+    # ------------------------------------------------------------------ helpers
+    def _extract_state(self, obs_td: TensorDict) -> torch.Tensor:
+        """Concatenate the actor's obs groups into a flat (batch, state_dim) tensor."""
+        parts = [obs_td[g] for g in self.actor_groups]
+        return torch.cat(parts, dim=-1)
+
+    def alpha(self, iteration: int) -> float:
+        """Effective blend coefficient at ``iteration`` — ``base_alpha * ramp * fade``.
+
+        Default schedule (matches SB3 ``_vc_alpha_envelope``): ramp linearly 0 → 1
+        over ``warmup_iters``, then **hold at base_alpha forever** — no decay.
+
+        Decay is opt-in: set ``stop_iter`` to enable a trapezoidal envelope that
+        linearly fades alpha → 0 between ``decay_start_iter`` (defaults to
+        ``stop_iter // 2``) and ``stop_iter``.
+
+        The runner's gate is ``alpha > 0``, so the VC blend branch *is* active
+        throughout warmup (as soon as the flow has trained at least once); the
+        a_vc contribution is just weighted less in the early iterations.
+        """
+        base = float(self._alpha_schedule(iteration))
+        if self.warmup_iters > 0 and iteration < self.warmup_iters:
+            ramp = float(iteration) / float(self.warmup_iters)
+        else:
+            ramp = 1.0
+        # Decay envelope is opt-in: only when stop_iter is explicitly set.
+        if self.stop_iter is not None and self.stop_iter > 0:
+            decay_start = (
+                self.decay_start_iter if self.decay_start_iter is not None else self.stop_iter // 2
+            )
+            if iteration >= self.stop_iter:
+                fade = 0.0
+            elif iteration > decay_start and self.stop_iter > decay_start:
+                fade = max(0.0, 1.0 - float(iteration - decay_start) / float(self.stop_iter - decay_start))
+            else:
+                fade = 1.0
+        else:
+            fade = 1.0
+        return float(base * ramp * fade)
+
+    def should_train(self, iteration: int) -> bool:
+        # No point training before we have a buffer worth using.
+        return iteration % self.model_train_every == 0
+
+    def is_ready(self) -> bool:
+        return self.flow.last_loss is not None
+
+    # ------------------------------------------------------------- selection
+    @torch.no_grad()
+    def vc_action(
+        self,
+        obs_td: TensorDict,
+        a_ppo: torch.Tensor,
+        a_mean: torch.Tensor,
+        a_std: torch.Tensor,
+    ) -> torch.Tensor:
+        """Per-env VC action. Falls back to a_ppo for envs with no valid candidate
+        (and globally when the flow hasn't trained yet).
+        """
+        if not self.is_ready():
+            self.last_vc_active_frac = 0.0
+            return a_ppo
+        state = self._extract_state(obs_td)
+        n_envs = state.shape[0]
+        D, A = self.state_dim, self.act_dim
+
+        if self.sample_method in ("sdedit", "gode"):
+            if self.sample_method == "sdedit":
+                cands = self.flow.sample_sdedit(
+                    state, a_ppo, tau=self.tau, num_samples=self.num_samples, n_steps=self.model_lambda_steps
+                )
+            else:
+                cands = self.flow.sample_gode(
+                    state,
+                    a_ppo,
+                    sigma=self.sigma,
+                    tau=self.tau,
+                    num_samples=self.num_samples,
+                    n_steps=self.model_lambda_steps,
+                )
+            n_cand = cands.shape[1]
+            cand_states = cands[:, :, :D]
+            cand_actions = cands[:, :, D : D + A]
+            # Manifold gate: candidate state stays within typical single-step distance.
+            dists = (cand_states - state[:, None, :]).norm(dim=-1)
+            ema = self._step_dist_ema
+            in_manifold = dists < float(ema) if (ema is not None and ema > 0.0) else torch.ones_like(dists, dtype=torch.bool)
+            # Trust band: action within policy mean ± trust * sigma.
+            trust = float(self.policy_trust_std)
+            mean_b = a_mean.reshape(n_envs, 1, A)
+            std_b = a_std.reshape(n_envs, 1, A).clamp_min(1e-8)
+            in_trust = (
+                (cand_actions >= mean_b - trust * std_b) & (cand_actions <= mean_b + trust * std_b)
+            ).all(dim=-1)
+            valid = in_manifold & in_trust
+            has_valid = valid.any(dim=1)
+            q_ready = (
+                self.q_mode == "selection"
+                and self.q_critic is not None
+                and self.q_critic.size() >= self.q_critic.batch_size
+            )
+            if q_ready:
+                obs_flat = state.to(self.device).reshape(n_envs, -1)
+                obs_rep = obs_flat.unsqueeze(1).expand(n_envs, n_cand, -1).reshape(-1, obs_flat.shape[-1])
+                cand_flat = cand_actions.reshape(-1, A).to(self.device)
+                q_scores = self.q_critic.q_min(obs_rep, cand_flat).reshape(n_envs, n_cand)
+                neg_inf = torch.tensor(float("-inf"), device=q_scores.device, dtype=q_scores.dtype)
+                selected_idx = torch.where(valid, q_scores, neg_inf).argmax(dim=1)
+            else:
+                # Pick the candidate whose state is closest to the current state.
+                masked_dists = torch.where(valid, dists, torch.full_like(dists, float("inf")))
+                selected_idx = masked_dists.argmin(dim=1)
+            a_vc = cand_actions[torch.arange(n_envs, device=state.device), selected_idx, :]
+            out = torch.where(has_valid[:, None], a_vc, a_ppo)
+            self.last_vc_active_frac = float(has_valid.float().mean().item())
+            return out
+
+        if self.sample_method == "inpainting":
+            cands = self.flow.sample_inpainting(
+                state, a_ppo, num_samples=self.num_samples, n_steps=self.model_lambda_steps
+            )
+            cand_actions = cands[:, :, D : D + A]
+        else:  # cfg
+            cand_actions = self.flow.sample_cfg(
+                state,
+                num_samples=self.num_samples,
+                guidance_scale=self.guidance_scale,
+                n_steps=self.model_lambda_steps,
+            )
+
+        n_cand = cand_actions.shape[1]
+        # Trust band gate: action must lie within policy mean ± trust * sigma on every dim.
+        trust = float(self.policy_trust_std)
+        mean_b = a_mean.reshape(n_envs, 1, A)
+        std_b = a_std.reshape(n_envs, 1, A).clamp_min(1e-8)
+        valid = (
+            (cand_actions >= mean_b - trust * std_b) & (cand_actions <= mean_b + trust * std_b)
+        ).all(dim=-1)
+        has_valid = valid.any(dim=1)
+        q_ready = (
+            self.q_mode == "selection"
+            and self.q_critic is not None
+            and self.q_critic.size() >= self.q_critic.batch_size
+        )
+        if q_ready:
+            obs_flat = state.to(self.device).reshape(n_envs, -1)
+            obs_rep = obs_flat.unsqueeze(1).expand(n_envs, n_cand, -1).reshape(-1, obs_flat.shape[-1])
+            cand_flat = cand_actions.reshape(-1, A).to(self.device)
+            q_scores = self.q_critic.q_min(obs_rep, cand_flat).reshape(n_envs, n_cand)
+            neg_inf = torch.tensor(float("-inf"), device=q_scores.device, dtype=q_scores.dtype)
+            selected_idx = torch.where(valid, q_scores, neg_inf).argmax(dim=1)
+        else:
+            # Uniform random pick across the trust-band-valid candidates for each env.
+            # Envs with no valid candidate are masked out below; the index value stored
+            # here for those envs is arbitrary.
+            selected_idx = torch.zeros(n_envs, dtype=torch.long, device=cand_actions.device)
+            valid_env_ids = torch.nonzero(has_valid, as_tuple=False).flatten()
+            for env_i in valid_env_ids.tolist():
+                choices = torch.nonzero(valid[env_i], as_tuple=False).flatten()
+                pick = torch.randint(choices.shape[0], (1,), device=choices.device)
+                selected_idx[env_i] = choices[int(pick.item())]
+        a_vc = cand_actions[torch.arange(n_envs, device=cand_actions.device), selected_idx, :]
+        # Fallback: envs with zero trust-band-valid candidates use a_ppo instead.
+        # Mirrors the new SB3 _select_flow_action behavior.
+        out = torch.where(has_valid[:, None], a_vc, a_ppo)
+        self.last_vc_active_frac = float(has_valid.float().mean().item())
+        return out
+
+    def record_blend_stats(self, a_blend: torch.Tensor, a_mean: torch.Tensor, a_std: torch.Tensor) -> None:
+        """Per-(env, dim) z-score of the blended action under the policy distribution."""
+        zscore = (a_blend - a_mean).abs() / a_std.clamp_min(1e-8)
+        self.last_blend_zscore = float(zscore.mean().item())
+        self.last_blend_tail_frac = float((zscore > 3.0).float().mean().item())
+
+    # ------------------------------------------------------------ data ingest
+    @torch.no_grad()
+    def record_step(
+        self,
+        obs_td: TensorDict,
+        action: torch.Tensor,
+        reward: torch.Tensor,
+        next_obs_td: TensorDict,
+        done: torch.Tensor,
+    ) -> None:
+        """Push one rollout step into the per-env pending buffer. On done, complete the episode."""
+        state = self._extract_state(obs_td).detach()
+        next_state = self._extract_state(next_obs_td).detach()
+        action_cpu = action.detach().to(torch.float32).cpu()
+        state_cpu = state.detach().to(torch.float32).cpu()
+        reward_cpu = reward.detach().to(torch.float32).reshape(-1).cpu()
+        done_cpu = done.detach().to(torch.float32).reshape(-1).cpu()
+
+        # Update the manifold-gate EMA from non-done steps (true env transitions only).
+        keep = (done.detach().reshape(-1) <= 0).cpu()
+        if keep.any():
+            step_dists = (next_state.cpu() - state_cpu).norm(dim=-1)
+            mean_step = float(step_dists[keep].mean().item())
+            if self._step_dist_ema is None:
+                self._step_dist_ema = mean_step
+            else:
+                a = self._step_dist_ema_alpha
+                self._step_dist_ema = (1.0 - a) * self._step_dist_ema + a * mean_step
+
+        for env_i in range(self.num_envs):
+            self._pending_obs[env_i].append(state_cpu[env_i])
+            self._pending_actions[env_i].append(action_cpu[env_i])
+            self._pending_rewards[env_i].append(float(reward_cpu[env_i]))
+
+        # Q-critic ingest (raw rewards, pre-bootstrap).
+        if self.q_critic is not None:
+            self.q_critic.add_transition(state, action, reward, next_state, done)
+
+        # Flush completed episodes into the visitation buffer.
+        done_idx = (done_cpu > 0).nonzero(as_tuple=True)[0].tolist()
+        if done_idx:
+            sa_rows: list[torch.Tensor] = []
+            mcq_vals: list[float] = []
+            for env_i in done_idx:
+                obs_seq = self._pending_obs[env_i]
+                act_seq = self._pending_actions[env_i]
+                r_seq = self._pending_rewards[env_i]
+                if len(r_seq) > 0:
+                    # Reverse MC return-to-go.
+                    g = 0.0
+                    running: list[float] = [0.0] * len(r_seq)
+                    for t in range(len(r_seq) - 1, -1, -1):
+                        g = float(r_seq[t]) + self.gamma_mcq * g
+                        running[t] = g
+                    sa = torch.stack(
+                        [torch.cat([obs_seq[t], act_seq[t]], dim=-1) for t in range(len(r_seq))],
+                        dim=0,
+                    )
+                    sa_rows.append(sa)
+                    mcq_vals.extend(running)
+                self._pending_obs[env_i] = []
+                self._pending_actions[env_i] = []
+                self._pending_rewards[env_i] = []
+            if sa_rows:
+                self.flow.add(torch.cat(sa_rows, dim=0), torch.tensor(mcq_vals, dtype=torch.float32))
+
+    # ------------------------------------------------------------------ train
+    def train(self, actor_mean_fn=None) -> dict[str, float]:
+        """Train the flow (and optionally the Q-critic). actor_mean_fn is called with
+        a (B, state_dim) tensor and must return (B, act_dim); only required when q_mode != "off".
+        """
+        loss_dict: dict[str, float] = {}
+        flow_loss = self.flow.train_steps(n_steps=self.model_train_steps, batch_size=self.model_batch_size)
+        if flow_loss is not None:
+            loss_dict["vc/flow_loss"] = flow_loss
+        loss_dict["vc/buffer_size"] = float(self.flow.buffer_size)
+        loss_dict["vc/last_alpha"] = self.last_alpha
+        loss_dict["vc/blend_zscore_mean"] = self.last_blend_zscore
+        loss_dict["vc/blend_zscore_tail_frac"] = self.last_blend_tail_frac
+        loss_dict["vc/vc_active_frac"] = self.last_vc_active_frac
+        if self.q_critic is not None and actor_mean_fn is not None:
+            q_loss = self.q_critic.train_steps(actor_mean_fn, n_steps=self.q_train_steps)
+            if q_loss is not None:
+                loss_dict["vc/q_loss"] = q_loss
+        if self._step_dist_ema is not None:
+            loss_dict["vc/step_dist_ema"] = float(self._step_dist_ema)
+        return loss_dict
+
+    # ----------------------------------------------------------------- persist
+    def save(self) -> dict:
+        out = {"vc_flow": self.flow.state_dict()}
+        if self.q_critic is not None:
+            out["vc_q_critic"] = self.q_critic.state_dict()
+        out["vc_step_dist_ema"] = self._step_dist_ema
+        return out
+
+    def load(self, state: dict) -> None:
+        if "vc_flow" in state:
+            self.flow.load_state_dict(state["vc_flow"])
+        if self.q_critic is not None and "vc_q_critic" in state:
+            self.q_critic.load_state_dict(state["vc_q_critic"])
+        self._step_dist_ema = state.get("vc_step_dist_ema")
 
 
 def resolve_visitation_critic_config(
-    vc_cfg: dict, obs: TensorDict, obs_groups: dict[str, list[str]], env: VecEnv
+    alg_cfg: dict,
+    obs: TensorDict,
+    obs_groups: dict[str, list[str]],
+    env: VecEnv,
 ) -> dict:
-    """Resolve the visitation critic configuration.
+    """Fill in state_dim / act_dim / obs_groups / num_envs on the VC config.
 
-    Computes ``state_dim`` from the resolved ``obs_groups["relative_state"]`` groups,
-    validates that each group contains 1D observations, and stores the resolved
-    ``obs_groups`` dict into ``vc_cfg`` for use inside :class:`VisitationCritic`.
-
-    Args:
-        vc_cfg: Visitation critic configuration dictionary.
-        obs: Observation dictionary from the environment.
-        obs_groups: Resolved observation groups dictionary (must contain ``"relative_state"``).
-        env: Environment object (unused currently, kept for API symmetry with resolve_rnd_config).
-
-    Returns:
-        The updated visitation critic configuration dictionary.
-
-    Raises:
-        ValueError: If any observation group in ``relative_state`` is not 1D.
-        ValueError: If ``relative_state`` resolved via the ``"policy"`` fallback, which is
-            not allowed — VC must operate on true simulator relative state.
+    Called from PPO.construct_algorithm when VC is enabled. The VC reuses the actor
+    obs group as its state input; we compute state_dim by summing the actor group widths.
     """
-    if vc_cfg is None:
-        return vc_cfg
-
-    # Guard against accidental policy-obs fallback.
-    if obs_groups["relative_state"] == ["policy"]:
-        raise ValueError(
-            "The visitation critic 'relative_state' observation group resolved to ['policy'], "
-            "which is not allowed. The environment must expose a dedicated 'relative_state' "
-            "observation group containing true simulator relative state "
-            "([differentiate_qpos(qpos, qpos_ref), qvel - qvel_ref])."
-        )
-
-    relative_state_groups = obs_groups["relative_state"]
-
-    # Compute state_dim from the resolved groups.
+    cfg = alg_cfg.get("visitation_critic_cfg") or {}
     state_dim = 0
-    for obs_group in relative_state_groups:
-        if len(obs[obs_group].shape) != 2:
+    for g in obs_groups["actor"]:
+        shape = obs[g].shape
+        if len(shape) != 2:
             raise ValueError(
-                f"The visitation critic only supports 1D observations, "
-                f"got shape {obs[obs_group].shape} for '{obs_group}'."
+                f"VisitationCritic only supports 1D actor obs groups, got shape {shape} for '{g}'."
             )
-        state_dim += obs[obs_group].shape[-1]
-
-    if len(relative_state_groups) == 1:
-        if state_dim % 2 != 0:
-            raise ValueError(
-                "The visitation critic expected an even relative_state dimension when a single "
-                f"concatenated group is used, but got state_dim={state_dim}."
-            )
-        rel_qpos_dim = state_dim // 2
-    else:
-        rel_qpos_dim = obs[relative_state_groups[0]].shape[-1]
-
-    vc_cfg["state_dim"] = state_dim
-    vc_cfg["rel_qpos_dim"] = rel_qpos_dim
-    vc_cfg["obs_groups"] = obs_groups
-
-    if vc_cfg.get("label_mode") in ("reward_bins", "l2_ball"):
-        vc_cfg["max_episode_length"] = int(env.max_episode_length)
-
-    return vc_cfg
+        state_dim += int(shape[-1])
+    cfg["state_dim"] = state_dim
+    cfg["act_dim"] = int(env.num_actions)
+    cfg["obs_groups"] = obs_groups
+    cfg["num_envs"] = int(env.num_envs)
+    cfg.setdefault("gamma", float(alg_cfg.get("gamma", 0.99)))
+    alg_cfg["visitation_critic_cfg"] = cfg
+    return alg_cfg

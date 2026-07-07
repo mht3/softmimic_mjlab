@@ -62,14 +62,8 @@ class OnPolicyRunner:
         alg_class: type[PPO] = resolve_callable(self.cfg["algorithm"]["class_name"])  # type: ignore
         self.alg = alg_class.construct_algorithm(obs, self.env, self.cfg, self.device)
 
-        # Visitation critic is owned by PPO.
+        # Visitation critic (state-action density model, alpha-blends actions during rollout).
         self.visitation_critic = self.alg.visitation_critic
-        if self.visitation_critic is not None and self.eval_env is None:
-            raise ValueError(
-                "Visitation critic requires a separate eval_env: enable eval in the agent "
-                "config and construct OnPolicyRunner(..., eval_env=...). Dataset collection "
-                "runs only on eval_env so PPO rollout and logger episode buffers are not reset."
-            )
 
         # Create the logger
         self.logger = Logger(
@@ -110,82 +104,52 @@ class OnPolicyRunner:
         total_it = start_it + num_learning_iterations
         for it in range(start_it, total_it):
             start = time.time()
-            # Before PPO rollout: collect VC trajectories on eval_env only (required at init).
             # Rollout
             with torch.inference_mode():
-                if self.visitation_critic is not None and self.visitation_critic.should_collect(it):
-                    collect_start = time.time()
-                    n_collected = self.visitation_critic.collect_trajectories(self.eval_env, self.alg.actor)
-                    print(
-                        f"[VC] Collected {n_collected} deterministic trajectories on eval env "
-                        f"in {time.time() - collect_start:.1f}s (iter {it})."
-                    )
                 for _ in range(self.cfg["num_steps_per_env"]):
-                    # Sample actions
+                    # Sample policy action; stores transition.actions and log_prob
                     actions = self.alg.act(obs)
+                    # --- Visitation critic alpha-blend (no-op when disabled) ---
+                    if self.visitation_critic is not None:
+                        alpha = self.visitation_critic.alpha(it)
+                        self.visitation_critic.last_alpha = alpha
+                        if alpha > 0.0 and self.visitation_critic.is_ready():
+                            a_mean, a_std = self.alg.transition.distribution_params[:2]
+                            a_vc = self.visitation_critic.vc_action(obs, actions, a_mean, a_std)
+                            blended = (1.0 - alpha) * actions + alpha * a_vc
+                            self.visitation_critic.record_blend_stats(blended, a_mean, a_std)
+                            self.alg.blend_action_into_transition(blended)
+                            actions = blended
+                    # --- end VC ---
                     # Step the environment
-                    obs, rewards, dones, extras = self.env.step(actions.to(self.env.device))
+                    next_obs, rewards, dones, extras = self.env.step(actions.to(self.env.device))
                     # Check for NaN values from the environment
                     if self.cfg.get("check_for_nan", True):
-                        check_nan(obs, rewards, dones)
+                        check_nan(next_obs, rewards, dones)
                     # Move to device
-                    obs, rewards, dones = (obs.to(self.device), rewards.to(self.device), dones.to(self.device))
-                    # Process the step
-                    self.alg.process_env_step(obs, rewards, dones, extras)
-                    # Track per-bin rollout outcomes during PPO collection (reward_bins mode).
-                    # Read logger accumulators before process_env_step zeros them.
-                    # Add the current step's reward/length since they haven't been
-                    # folded in yet (process_env_step does that below).
-                    if self.visitation_critic is not None and dones.any():
-                        done_mask = dones > 0
-                        self.visitation_critic.record_episode_outcomes(
-                            self.logger.cur_reward_sum[done_mask] + rewards[done_mask],
-                            self.logger.cur_episode_length[done_mask] + 1,
-                        )
-                    # Override reset states with VC-generated states for envs that just terminated.
-                    if self.visitation_critic is not None and self.visitation_critic.is_trained and dones.any():
-                        done_env_ids = torch.where(dones > 0)[0]
-                        reset_states = self.visitation_critic.generate_reset_states(len(done_env_ids))
-                        target_abs_qpos = self.env.set_reset_states(done_env_ids, reset_states)
-                        # Re-fetch observations so the actor sees the VC-generated state.
-                        obs = self.env.get_observations().to(self.device)
-                        # Re-update obs/critic normalizers on the corrected post-override obs.
-                        # process_env_step already updated them on the auto-reset obs, which
-                        # differs from what the actor actually sees next — this second call
-                        # ensures normalizer statistics track the true input distribution.
-                        self.alg.actor.update_normalization(obs)
-                        self.alg.critic.update_normalization(obs)
-                        # Absolute qpos error: target written vs simulator robot state (same layout as dataset).
-                        if target_abs_qpos is not None:
-                            env_u = self.env.unwrapped
-                            robot = env_u.scene["robot"]
-                            origins = env_u.scene.env_origins[done_env_ids]
-                            pos_w = robot.data.root_link_pos_w[done_env_ids]
-                            quat_w = robot.data.root_link_quat_w[done_env_ids]
-                            joint_pos = robot.data.joint_pos[done_env_ids]
-                            curr_abs_qpos = torch.cat([pos_w - origins, quat_w, joint_pos], dim=-1)
-                            abs_qpos_err = torch.linalg.norm(
-                                curr_abs_qpos - target_abs_qpos.to(self.device), dim=-1
-                            )
-                            log_dict = extras.setdefault("log", {})
-                            log_dict["visitation_critic/reset_abs_qpos_error_mean"] = abs_qpos_err.mean()
-                            log_dict["visitation_critic/reset_abs_qpos_error_max"] = abs_qpos_err.max()
+                    next_obs = next_obs.to(self.device)
+                    rewards = rewards.to(self.device)
+                    dones = dones.to(self.device)
+                    # Feed VC with raw rewards before PPO mutates them for the time-out bootstrap.
+                    if self.visitation_critic is not None:
+                        self.visitation_critic.record_step(obs, actions, rewards, next_obs, dones)
+                    # Process the step (mutates rewards in place for time_outs)
+                    self.alg.process_env_step(next_obs, rewards, dones, extras)
                     # Extract intrinsic rewards if RND is used (only for logging)
                     intrinsic_rewards = self.alg.intrinsic_rewards if self.cfg["algorithm"]["rnd_cfg"] else None
                     # Book keeping
                     self.logger.process_env_step(rewards, dones, extras, intrinsic_rewards)
+                    obs = next_obs
 
                 stop = time.time()
                 collect_time = stop - start
                 start = stop
 
-                # Compute returns
+            with torch.inference_mode():
                 self.alg.compute_returns(obs)
 
             # Update policy
             loss_dict = self.alg.update(iteration=it)
-            if self.visitation_critic is not None:
-                loss_dict.update(self.visitation_critic.rollout_bin_fracs())
 
             stop = time.time()
             learn_time = stop - start
@@ -202,7 +166,6 @@ class OnPolicyRunner:
                 learning_rate=self.alg.learning_rate,
                 action_std=self.alg.get_policy().output_std,
                 rnd_weight=self.alg.rnd.weight if self.cfg["algorithm"]["rnd_cfg"] else None,
-                wandb_media=getattr(self.alg, "vc_wandb_media", None),
             )
 
             # Periodic evaluation on a separate medium-perturbation env.

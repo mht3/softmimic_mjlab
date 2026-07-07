@@ -11,31 +11,53 @@ from mjlab.rl import (
 
 @dataclass
 class VisitationCriticCfg:
+  """Config for the state-action visitation critic (SB3 VCPPO port).
+
+  The VC learns a flow-matching density over locally high-MCQ state-action
+  pairs and alpha-blends proposed actions with the PPO sample at rollout
+  time. No env resets are performed.
+  """
+
   enabled: bool = False
-  conditioning_type: str = "discrete"
-  label_mode: str = "l2_ball"
-  l2_radius: float = 4.0 # criteria for good/bad end state
-  num_classes: int = 2
-  train_every_n_iters: int = 500
-  num_warmup_iterations: int = 3000
-  num_train_steps: int = 5000
-  learning_rate: float = 3e-4
-  batch_size: int = 1024
-  max_trajectories: int = 10000
-  guidance_scale: float = 2.5
-  num_euler_steps: int = 100
-  cfg_dropout_prob: float = 0.2
-  reset_condition_label: int = 0
-  # Probabilistic bin sampling for reward_bins mode. Must have length 4
-  # and sum to 1.0. Order: (fail-low, fail-high, succeed-low, succeed-high).
-  reset_bin_probs: tuple[float, ...] = (0.25, 0.50, 0.20, 0.05)
-  # CFM vector-field network architecture.
-  hidden_dims: tuple[int, ...] = (1024, 1024, 1024)
-  class_dim: int = 8
-  # Deterministic trajectory collection (runs right before each VC training step).
-  num_collect_trajectories: int = 10000
-  disable_push_during_collection: bool = False
-  max_num_trains: int = 1  # -1 = unlimited; M > 0 = train at most M times total
+  # Conditional sampling method used to propose alternative actions:
+  # sdedit (default), gode, inpainting, cfg.
+  sample_method: str = "sdedit"
+  # Base blend coefficient. The runner multiplies this by a trapezoidal envelope
+  # (linear ramp up over warmup_iters, hold, optional linear decay).
+  alpha: float = 0.5
+  warmup_iters: int = 250
+  # Iteration at which the alpha envelope hits zero. None = no decay (hold).
+  stop_iter: int | None = None
+  # Iteration at which the decay leg begins. None = stop_iter // 2 when stop_iter is set.
+  decay_start_iter: int | None = None
+  # Flow-matching model hyperparameters.
+  model_train_every: int = 1
+  model_train_steps: int = 80
+  model_batch_size: int = 256
+  model_lr: float = 1e-3
+  model_lambda_steps: int = 50
+  model_net: tuple[int, ...] = (128, 128, 128)
+  # Visitation buffer + MCQ admission filter.
+  buffer_size: int = 100_000
+  q_top_fraction: float = 0.25
+  q_filter_k: int = 16
+  gamma_mcq: float = 0.99
+  # Candidate sampling hyperparameters.
+  num_samples: int = 50
+  policy_trust_std: float = 3.0
+  tau: float = 0.9
+  sigma: float = 0.2
+  guidance_scale: float = 1.0
+  cfg_dropout: float = 0.1
+  # Optional side Q-critic for candidate ranking. "off" disables it entirely.
+  q_mode: str = "off"
+  q_net: tuple[int, ...] = (256, 256)
+  q_lr: float = 3e-4
+  q_batch_size: int = 256
+  q_train_steps: int = 300
+  q_replay_size: int = 1_000_000
+  q_tau: float = 0.005
+  seed: int = 0
 
 
 @dataclass
@@ -70,7 +92,6 @@ def unitree_g1_23dof_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
     obs_groups={
       "actor": ("actor",),
       "critic": ("critic",),
-      "relative_state": ("relative_state",),
     },
     actor=RslRlModelCfg(
       hidden_dims=(512, 256, 128),
