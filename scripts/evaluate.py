@@ -26,7 +26,7 @@ from tqdm import tqdm
 
 import mjlab
 from mjlab.envs import ManagerBasedRlEnv
-from src.utils.vecenv_wrapper import RslRlVecEnvSpecialResetWrapper as RslRlVecEnvWrapper
+from mjlab.rl import RslRlVecEnvWrapper
 from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg, load_runner_cls
 from mjlab.tasks.tracking.mdp import MotionCommand, MotionCommandCfg
 from mjlab.utils.lab_api.math import quat_apply, quat_from_euler_xyz, quat_mul

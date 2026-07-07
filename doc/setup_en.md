@@ -53,7 +53,7 @@ conda activate unitree_rl_mjlab
 Clone the repository using Git:
 
 ```bash
-git clone git@github.com:mht3/humanoid_visitation_critic.git
+git clone git@github.com:mht3/softmimic_mjlab.git
 ```
 
 ### 2.2 Install Dependencies
@@ -61,7 +61,7 @@ git clone git@github.com:mht3/humanoid_visitation_critic.git
 Navigate to the project root directory and run the setup script:
 
 ```bash
-cd humanoid_visitation_critic
+cd softmimic_mjlab
 bash setup.sh
 ```
 

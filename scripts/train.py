@@ -14,7 +14,7 @@ from typing import Literal, cast
 import tyro
 
 from mjlab.envs import ManagerBasedRlEnv, ManagerBasedRlEnvCfg
-from mjlab.rl import RslRlBaseRunnerCfg
+from mjlab.rl import RslRlBaseRunnerCfg, RslRlVecEnvWrapper
 from mjlab.tasks.registry import list_tasks, load_env_cfg, load_rl_cfg, load_runner_cls
 from mjlab.tasks.tracking.mdp import MotionCommandCfg
 from mjlab.utils.gpu import select_gpus
@@ -23,7 +23,6 @@ from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
 from src.utils.deploy_export import export_deploy_cfg
 from src.utils.mjlab_on_policy_runner_with_eval import MjlabOnPolicyRunnerWithEval
-from src.utils.vecenv_wrapper import RslRlVecEnvSpecialResetWrapper
 
 
 def _write_params_training_scripts(log_dir: Path) -> None:
@@ -148,7 +147,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     )
     print("[INFO] Recording videos during training.")
 
-  env = RslRlVecEnvSpecialResetWrapper(env, clip_actions=cfg.agent.clip_actions)
+  env = RslRlVecEnvWrapper(env, clip_actions=cfg.agent.clip_actions)
 
   agent_cfg = asdict(cfg.agent)
   env_cfg = asdict(cfg.env)
@@ -166,10 +165,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     eval_env_cfg.seed = seed + 10_000
 
     if is_tracking_task:
-      eval_detail = (
-        "env_cfg deep-copied from training; tracking perturbations preserved; "
-        "no VC reset overrides are applied during eval"
-      )
+      eval_detail = "env_cfg deep-copied from training; tracking perturbations preserved"
     else:
       # Pin eval to a fixed medium difficulty: drop the training curriculum
       # (which would never advance on the eval env) and hard-code the medium
@@ -200,7 +196,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
       f"({eval_detail})."
     )
     eval_env_raw = ManagerBasedRlEnv(cfg=eval_env_cfg, device=device)
-    eval_env = RslRlVecEnvSpecialResetWrapper(eval_env_raw, clip_actions=cfg.agent.clip_actions)
+    eval_env = RslRlVecEnvWrapper(eval_env_raw, clip_actions=cfg.agent.clip_actions)
     runner_kwargs["eval_env"] = eval_env
   else:
     eval_env = None

@@ -13,13 +13,7 @@ from itertools import chain
 from tensordict import TensorDict
 
 from rsl_rl.env import VecEnv
-from rsl_rl.extensions import (
-    RandomNetworkDistillation,
-    VisitationCritic,
-    resolve_rnd_config,
-    resolve_symmetry_config,
-    resolve_visitation_critic_config,
-)
+from rsl_rl.extensions import RandomNetworkDistillation, resolve_rnd_config, resolve_symmetry_config
 from rsl_rl.models import MLPModel
 from rsl_rl.storage import RolloutStorage
 from rsl_rl.utils import resolve_callable, resolve_obs_groups, resolve_optimizer
@@ -60,8 +54,6 @@ class PPO:
         device: str = "cpu",
         # RND parameters
         rnd_cfg: dict | None = None,
-        # Visitation Critic parameters
-        visitation_critic_cfg: dict | None = None,
         # Symmetry parameters
         symmetry_cfg: dict | None = None,
         # Distributed training parameters
@@ -92,19 +84,6 @@ class PPO:
         else:
             self.rnd = None
             self.rnd_optimizer = None
-
-        # Visitation Critic components
-        if visitation_critic_cfg:
-            self.visitation_critic = VisitationCritic(
-                cfg=visitation_critic_cfg,
-                state_dim=visitation_critic_cfg["state_dim"],
-                act_dim=visitation_critic_cfg["act_dim"],
-                obs_groups=visitation_critic_cfg["obs_groups"],
-                num_envs=visitation_critic_cfg["num_envs"],
-                device=self.device,
-            )
-        else:
-            self.visitation_critic = None
 
         # Symmetry components
         if symmetry_cfg is not None:
@@ -170,17 +149,6 @@ class PPO:
         self.transition.observations = obs
         return self.transition.actions  # type: ignore
 
-    def blend_action_into_transition(self, blended_actions: torch.Tensor) -> None:
-        """Overwrite the in-flight transition's action and recompute its log_prob.
-
-        Called by the runner after the visitation critic has alpha-blended an
-        alternative action into the PPO sample. The actor's distribution was
-        already populated by the most recent ``act()`` call, so we re-evaluate
-        log_prob without a second forward pass through the actor MLP.
-        """
-        self.transition.actions = blended_actions.detach()
-        self.transition.actions_log_prob = self.actor.get_output_log_prob(blended_actions).detach()  # type: ignore
-
     def process_env_step(
         self, obs: TensorDict, rewards: torch.Tensor, dones: torch.Tensor, extras: dict[str, torch.Tensor]
     ) -> None:
@@ -240,7 +208,7 @@ class PPO:
         if not self.normalize_advantage_per_mini_batch:
             st.advantages = (st.advantages - st.advantages.mean()) / (st.advantages.std() + 1e-8)
 
-    def update(self, iteration: int | None = None) -> dict[str, float]:
+    def update(self) -> dict[str, float]:
         """Run optimization epochs over stored batches and return mean losses."""
         mean_value_loss = 0
         mean_surrogate_loss = 0
@@ -444,13 +412,6 @@ class PPO:
             loss_dict["rnd"] = mean_rnd_loss
         if self.symmetry:
             loss_dict["symmetry"] = mean_symmetry_loss
-        if (
-            self.visitation_critic is not None
-            and iteration is not None
-            and self.visitation_critic.should_train(iteration)
-        ):
-            vc_loss_dict = self.visitation_critic.train()
-            loss_dict.update(vc_loss_dict)
 
         return loss_dict
 
@@ -467,8 +428,6 @@ class PPO:
         self.critic.eval()
         if self.rnd:
             self.rnd.eval()
-        if self.visitation_critic is not None:
-            self.visitation_critic.flow.model.eval()
 
     def save(self) -> dict:
         """Return a dict of all models for saving."""
@@ -480,8 +439,6 @@ class PPO:
         if self.rnd:
             saved_dict["rnd_state_dict"] = self.rnd.state_dict()
             saved_dict["rnd_optimizer_state_dict"] = self.rnd_optimizer.state_dict()
-        if self.visitation_critic:
-            saved_dict.update(self.visitation_critic.save())
         return saved_dict
 
     def load(self, loaded_dict: dict, load_cfg: dict | None, strict: bool) -> bool:
@@ -506,8 +463,6 @@ class PPO:
         if load_cfg.get("rnd") and self.rnd:
             self.rnd.load_state_dict(loaded_dict["rnd_state_dict"], strict=strict)
             self.rnd_optimizer.load_state_dict(loaded_dict["rnd_optimizer_state_dict"])
-        if load_cfg.get("visitation_critic", True) and self.visitation_critic:
-            self.visitation_critic.load(loaded_dict)
         return load_cfg.get("iteration", False)
 
     def get_policy(self) -> MLPModel:
@@ -524,26 +479,12 @@ class PPO:
 
         # Resolve observation groups
         default_sets = ["actor", "critic"]
-        rnd_enabled = "rnd_cfg" in cfg["algorithm"] and cfg["algorithm"]["rnd_cfg"] is not None
-        if rnd_enabled:
+        if "rnd_cfg" in cfg["algorithm"] and cfg["algorithm"]["rnd_cfg"] is not None:
             default_sets.append("rnd_state")
-        # Visitation critic reuses the actor obs group; no extra obs_group is required.
-        vc_cfg = cfg["algorithm"].get("visitation_critic_cfg")
-        vc_enabled = vc_cfg is not None and vc_cfg.get("enabled", False)
-        # Drop any stale "relative_state" entry from older configs.
-        cfg["obs_groups"].pop("relative_state", None)
-        if not rnd_enabled:
-            cfg["obs_groups"].pop("rnd_state", None)
         cfg["obs_groups"] = resolve_obs_groups(obs, cfg["obs_groups"], default_sets)
 
         # Resolve RND config if used
         cfg["algorithm"] = resolve_rnd_config(cfg["algorithm"], obs, cfg["obs_groups"], env)
-
-        # Resolve visitation critic config if used
-        if vc_enabled:
-            resolve_visitation_critic_config(cfg["algorithm"], obs, cfg["obs_groups"], env)
-        else:
-            cfg["algorithm"]["visitation_critic_cfg"] = None
 
         # Resolve symmetry config if used
         cfg["algorithm"] = resolve_symmetry_config(cfg["algorithm"], env)
@@ -560,8 +501,7 @@ class PPO:
         storage = RolloutStorage("rl", env.num_envs, cfg["num_steps_per_env"], obs, [env.num_actions], device)
 
         # Initialize the algorithm
-        alg_kwargs = dict(cfg["algorithm"])
-        alg: PPO = alg_class(actor, critic, storage, device=device, **alg_kwargs, multi_gpu_cfg=cfg["multi_gpu"])
+        alg: PPO = alg_class(actor, critic, storage, device=device, **cfg["algorithm"], multi_gpu_cfg=cfg["multi_gpu"])
 
         return alg
 

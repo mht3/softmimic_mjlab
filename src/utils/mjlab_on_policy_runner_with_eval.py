@@ -3,8 +3,8 @@
 The vendored ``MjlabOnPolicyRunner`` strips optional actor/critic keys then calls
 ``OnPolicyRunner.__init__`` without an ``eval_env`` argument. This subclass keeps
 the same stripping behavior and ONNX/save/load extensions from mjlab, but
-initializes ``OnPolicyRunner`` with ``eval_env`` (required for visitation critic
-and separate eval rollouts).
+initializes ``OnPolicyRunner`` with ``eval_env`` (required for separate eval
+rollouts).
 """
 
 from __future__ import annotations

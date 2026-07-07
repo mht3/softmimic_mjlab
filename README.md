@@ -1,15 +1,11 @@
-# Humanoid Visitation Critic
+# SoftMimic Mjlab
 
 
-## ✳️ Overview
-Adaptation of the [Unitree RL Mjlab Repository](https://github.com/unitreerobotics/unitree_rl_mjlab.git) for visitation critics. This is a reinforcement learning project built upon the
+## Overview
+Adaptation of the [Unitree RL Mjlab Repository](https://github.com/unitreerobotics/unitree_rl_mjlab.git) for [SoftMimic](https://github.com/Improbable-AI/softmimic). This is a reinforcement learning project built upon the
 [mjlab](https://github.com/mujocolab/mjlab.git), using MuJoCo as its 
-physics simulation backend, currently supporting Unitree G1 23dof.
+physics simulation backend, currently supporting Unitree G1 robot (both 29 and 23 dof).
 
-Mjlab combines [Isaac Lab](https://github.com/isaac-sim/IsaacLab)'s proven API
-with best-in-class [MuJoCo](https://github.com/google-deepmind/mujoco_warp)
-physics to provide lightweight, modular abstractions for RL robotics research
-and sim-to-real deployment.
 
 <div align="center">
 
@@ -20,12 +16,12 @@ and sim-to-real deployment.
 </div>
 
 
-## 📦 Installation and Configuration
+## Installation and Configuration
 
 Please refer to [setup.md](doc/setup_en.md) for installation and configuration steps.
 
 
-## 🔁 Process Overview
+## Process Overview
 
 The basic workflow for using reinforcement learning to achieve motion control is:
 
@@ -36,7 +32,7 @@ The basic workflow for using reinforcement learning to achieve motion control is
 - **Sim2Real**: Deploy trained policies to physical Unitree robots for real-world execution.
 
 
-## 🛠️ Usage Guide
+## Usage Guide
 
 ### 1. Velocity Tracking Training
 
@@ -56,12 +52,8 @@ python scripts/train.py Unitree-G1-23Dof-Flat \
 
 - The first argument (e.g., Unitree-G1-23Dof-Flat) specifies the training task.
 Available velocity tracking tasks:
-  - Unitree-Go2-Flat
   - Unitree-G1-Flat
   - Unitree-G1-23Dof-Flat
-  - Unitree-H1_2-Flat
-  - Unitree-A2-Flat
-  - Unitree-R1-Flat
 
 > [!NOTE]
 > For more details, refer to the mjlab documentation:
@@ -106,7 +98,7 @@ Available tasks:
 > For detailed motion imitation instructions, refer to the BeyondMimic documentation:
 > [BeyondMimic documentation](https://github.com/HybridRobotics/whole_body_tracking/blob/main/README.md#motion-preprocessing--registry-setup).
 
-#### ⚙️  Parameter Description
+#### Parameter Description
 - `--env.scene`: simulation scene configuration (e.g., num_envs, dt, ground type, gravity, disturbances)
 - `--env.observations`: observation space configuration (e.g., joint state, IMU, commands, etc.)
 - `--env.rewards`: reward terms used for policy optimization
@@ -137,11 +129,6 @@ python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src
 
 - During training, policy.onnx and policy.onnx.data are also exported for deployment onto physical robots.
 
-**Visualization**：
-
-| Go2                              | G1                             | H1_2                               | G1_mimic                          |
-|----------------------------------|--------------------------------|------------------------------------|-----------------------------------|
-| ![go2](doc/gif/go2-velocity.gif) | ![g1](doc/gif/g1-velocity.gif) | ![h1_2](doc/gif/h1_2-velocity.gif) | ![g1_mimic](doc/gif/g1-mimic.gif) |
 
 ### 4. Real Deployment
 
@@ -218,17 +205,13 @@ cd deploy/robots/g1/build
 **Arguments**：
 - `network`: The network interface used to connect to the robot. Use `lo` for simulation deployment, and `enp5s0` for the real robot(You can check it using the `ifconfig` command) 
 
-</div>
-
-**Deployment Results**：
-
-| Go2                                                    | G1                                                    | H1_2           | G1_mimic                                           |
-|--------------------------------------------------------|-------------------------------------------------------|----------------|----------------------------------------------------|
-| <img src="doc/gif/go2-velocity-real.gif" width="300"/> | <img src="doc/gif/g1-velocity-real.gif" width="300"/> | <img src="doc/gif/h1_2-velocity-real.gif" width="300"/> | <img src="doc/gif/g1-mimic-real.gif" width="300"/> |
-
 
 ## Acknowledgements
 
 This project would not be possible without the contributions of the following repositories:
+
 - [mjlab](https://github.com/mujocolab/mjlab.git): training and execution framework
 - [Unitree RL Mjlab Repository](https://github.com/unitreerobotics/unitree_rl_mjlab.git): adaptation for Unitree robots
+- [SoftMimic](https://github.com/Improbable-AI/softmimic): IsaacLab implementation for SoftMimic RL sim, training, and deployment.
+- [Mink](https://github.com/kevinzakka/mink): Inverse kinematics solver in Mujoco
+- [RSL-RL](https://github.com/leggedrobotics/rsl_rl): Policy training framework.

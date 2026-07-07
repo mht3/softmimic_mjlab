@@ -10,7 +10,6 @@ from mjlab.utils.lab_api.math import (
 )
 
 from .commands import MotionCommand
-from src.utils.relative_state_obs import relative_state_from_sim
 
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
@@ -27,11 +26,6 @@ def motion_anchor_pos_b(env: ManagerBasedRlEnv, command_name: str) -> torch.Tens
   )
 
   return pos.view(env.num_envs, -1)
-
-
-def relative_state(env: ManagerBasedRlEnv) -> torch.Tensor:
-  """Return simulator-grounded [rel_qpos, rel_qvel] for visitation-critic resets."""
-  return relative_state_from_sim(env)
 
 
 def motion_anchor_ori_b(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:

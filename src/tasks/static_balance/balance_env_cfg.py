@@ -89,12 +89,6 @@ def make_balance_env_cfg() -> ManagerBasedRlEnvCfg:
       enable_corruption=False,
       history_length=1,
     ),
-    "relative_state": ObservationGroupCfg(
-      terms={"relative_state": ObservationTermCfg(func=mdp.relative_state)},
-      concatenate_terms=True,
-      enable_corruption=False,
-      history_length=1,
-    ),
   }
 
   ##

@@ -15,7 +15,6 @@ from .utils import (
     split_and_pad_trajectories,
     unpad_trajectories,
 )
-from .qpos import differentiate_qpos, integrate_qpos
 
 __all__ = [
     "check_nan",
@@ -26,6 +25,4 @@ __all__ = [
     "resolve_optimizer",
     "split_and_pad_trajectories",
     "unpad_trajectories",
-    "differentiate_qpos",
-    "integrate_qpos",
 ]
