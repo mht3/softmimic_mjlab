@@ -13,8 +13,8 @@ from softmimic_deploy.src.motion_lib.motion_lib_from_multi_csv import (
     ProceduralMotionLibFromDemo,
 )
 
-from constants import FORCEABLE_LINKS, FOOT_NAMES, KEYPOINT_BODY_NAMES
-from tasks import KneeBendingTask
+from .constants import FORCEABLE_LINKS, FOOT_NAMES, KEYPOINT_BODY_NAMES
+from .tasks import KneeBendingTask
 
 
 class G1_Mink_IK_Solver:

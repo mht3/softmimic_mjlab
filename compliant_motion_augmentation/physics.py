@@ -3,7 +3,7 @@ from typing import Dict, Tuple
 import mujoco as mj
 import numpy as np
 
-from constants import (
+from .constants import (
     FOOT_NAMES,
     IK_CHECK_MAX_COM_TRACKING_ERROR,
     IK_CHECK_MAX_DISPLACEMENT_MAGNITUDE,

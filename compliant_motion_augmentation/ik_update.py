@@ -7,10 +7,10 @@ from scipy.spatial.transform import Rotation, Slerp
 
 import mink
 
-from config import SimulationConfig
-from constants import KEYPOINT_BODY_NAMES, MAX_RELEASE_ANGULAR_VEL, MAX_RELEASE_LINEAR_VEL
-from ik_solver import G1_Mink_IK_Solver
-from physics import calculate_cop_aware_com_target
+from .config import SimulationConfig
+from .constants import KEYPOINT_BODY_NAMES, MAX_RELEASE_ANGULAR_VEL, MAX_RELEASE_LINEAR_VEL
+from .ik_solver import G1_Mink_IK_Solver
+from .physics import calculate_cop_aware_com_target
 
 
 def perform_mink_ik_step(

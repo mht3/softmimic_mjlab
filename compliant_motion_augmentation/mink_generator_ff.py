@@ -19,10 +19,13 @@ except ImportError:  # pragma: no cover - handled at runtime
     ProceduralMotionLibFromDemo = None
 
 if __package__ is None or __package__ == "":
-    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-    from config import SimulationConfig
-    from ik_solver import G1_Mink_IK_Solver
-    from runner import run_simulation_or_generation
+    # Running as a standalone script (e.g. `python mink_generator_ff.py`).
+    # Import via the real package name so sibling modules' relative imports
+    # (e.g. `from .constants import ...`) still resolve.
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from compliant_motion_augmentation.config import SimulationConfig
+    from compliant_motion_augmentation.ik_solver import G1_Mink_IK_Solver
+    from compliant_motion_augmentation.runner import run_simulation_or_generation
 else:
     from .config import SimulationConfig
     from .ik_solver import G1_Mink_IK_Solver

@@ -6,8 +6,8 @@ import numpy as np
 from scipy.spatial.transform import Rotation
 from tqdm import tqdm
 
-from config import SimulationConfig
-from constants import (
+from .config import SimulationConfig
+from .constants import (
     DOWNWARD_ONLY_FORCEABLE_LINKS,
     MAX_FORCEFIELD_ROTATIONAL_STIFFNESS,
     MAX_FORCEFIELD_STIFFNESS,
@@ -18,7 +18,7 @@ from constants import (
     MIN_ROBOT_ROTATIONAL_STIFFNESS,
     MIN_ROBOT_STIFFNESS,
 )
-from ik_solver import G1_Mink_IK_Solver
+from .ik_solver import G1_Mink_IK_Solver
 
 
 def generate_random_force_profile(total_duration: float, possible_links: List[str], force_mode: str, ik_solver: G1_Mink_IK_Solver, config: SimulationConfig) -> List[Dict[str, Any]]:

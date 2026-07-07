@@ -10,8 +10,8 @@ import pandas as pd
 import torch
 from scipy.spatial.transform import Rotation
 
-from config import SimulationConfig
-from constants import (
+from .config import SimulationConfig
+from .constants import (
     FORCEABLE_LINKS,
     MAX_ROBOT_ROTATIONAL_STIFFNESS,
     MAX_ROBOT_STIFFNESS,
@@ -19,11 +19,11 @@ from constants import (
     MIN_ROBOT_STIFFNESS,
     TELEPORT_THRESHOLD,
 )
-from force_profile import generate_random_force_profile
-from ik_solver import G1_Mink_IK_Solver
-from ik_update import perform_single_ik_update
-from physics import is_ik_solution_feasible
-from visualization import add_visual_overlays
+from .force_profile import generate_random_force_profile
+from .ik_solver import G1_Mink_IK_Solver
+from .ik_update import perform_single_ik_update
+from .physics import is_ik_solution_feasible
+from .visualization import add_visual_overlays
 
 try:
     import imageio
