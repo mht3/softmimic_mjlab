@@ -1,4 +1,4 @@
-"""RL configuration for Unitree G1_23Dof tracking task."""
+"""RL configuration for Unitree G1_23Dof compliant tracking task."""
 
 from mjlab.rl import (
   RslRlModelCfg,
@@ -7,15 +7,16 @@ from mjlab.rl import (
 )
 
 
-def unitree_g1_23dof_tracking_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
-  """Create RL runner configuration for Unitree G1_23Dof tracking task."""
+def unitree_g1_23dof_compliant_tracking_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
+  """Create RL runner configuration for Unitree G1_23Dof compliant tracking task."""
   return RslRlOnPolicyRunnerCfg(
     obs_groups={
       "actor": ("actor",),
       "critic": ("critic",),
     },
+    # Network sizes and entropy follow SoftMimic Table II.
     actor=RslRlModelCfg(
-      hidden_dims=(512, 256, 128),
+      hidden_dims=(512, 512, 256, 128),
       activation="elu",
       obs_normalization=True,
       distribution_cfg={
@@ -25,7 +26,7 @@ def unitree_g1_23dof_tracking_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
       },
     ),
     critic=RslRlModelCfg(
-      hidden_dims=(512, 256, 128),
+      hidden_dims=(512, 512, 512, 512),
       activation="elu",
       obs_normalization=True,
     ),
@@ -33,7 +34,7 @@ def unitree_g1_23dof_tracking_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
       value_loss_coef=1.0,
       use_clipped_value_loss=True,
       clip_param=0.2,
-      entropy_coef=0.005,
+      entropy_coef=0.002,
       num_learning_epochs=5,
       num_mini_batches=4,
       learning_rate=1.0e-3,
@@ -43,7 +44,7 @@ def unitree_g1_23dof_tracking_ppo_runner_cfg() -> RslRlOnPolicyRunnerCfg:
       desired_kl=0.01,
       max_grad_norm=1.0,
     ),
-    experiment_name="g1_23dof_tracking",
+    experiment_name="g1_23dof_compliant_tracking",
     wandb_project="mjlab_tracking",
     save_interval=500,
     num_steps_per_env=24,

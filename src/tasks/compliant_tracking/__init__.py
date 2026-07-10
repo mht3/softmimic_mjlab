@@ -1,1 +1,1 @@
-"""Motion imitation environments for legged robots."""
+"""Compliant motion imitation environments for legged robots (SoftMimic)."""

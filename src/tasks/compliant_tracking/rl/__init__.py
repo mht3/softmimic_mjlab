@@ -1,3 +1,3 @@
 from .runner import (
-  MotionTrackingOnPolicyRunner as MotionTrackingOnPolicyRunner,
+  CompliantMotionTrackingOnPolicyRunner as CompliantMotionTrackingOnPolicyRunner,
 )

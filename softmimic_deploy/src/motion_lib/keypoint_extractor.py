@@ -12,49 +12,82 @@ def get_isaac_to_mujoco_joint_map(robot_type: str, num_joints_in_data: int) -> l
     """Map Isaac joint ordering to MuJoCo ordering for the G1 robot."""
     if robot_type != "g1":
         raise ValueError(f"Unsupported robot type for joint mapping: {robot_type}. Expected 'g1'.")
-    if num_joints_in_data != 29:
-        raise ValueError(f"Expected 29 joints for G1, but got {num_joints_in_data}")
-    return [
-        0, 3, 6, 9, 13, 17, 1, 4, 7, 10, 14, 18, 2, 5, 8, 11, 15, 19, 21, 23, 25, 27, 12, 16, 20, 22, 24, 26, 28
-    ]
+    if num_joints_in_data == 29:
+        return [
+            0, 3, 6, 9, 13, 17, 1, 4, 7, 10, 14, 18, 2, 5, 8, 11, 15, 19, 21, 23, 25, 27, 12, 16, 20, 22, 24, 26, 28
+        ]
+    if num_joints_in_data == 23:
+        # The 23-DOF CSV column order (the 29-DOF isaac order with waist
+        # roll/pitch and both wrist pitch/yaw dropped, see
+        # scripts/csv_29dof_to_23dof.py) is already identical to the qpos joint
+        # order of g1_23dof.xml, so no reordering is needed.
+        return list(range(23))
+    raise ValueError(f"Expected 23 or 29 joints for G1, but got {num_joints_in_data}")
 
 
 class KeypointExtractor:
     """Extract 3D keypoints from robot poses using standard MuJoCo forward kinematics."""
 
-    def __init__(self, robot_type: str = "g1"):
+    def __init__(self, robot_type: str = "g1", num_joints: int = 29):
         if robot_type != "g1":
             raise ValueError(f"Unsupported robot type: {robot_type}. KeypointExtractor only supports 'g1'.")
+        if num_joints not in (23, 29):
+            raise ValueError(f"KeypointExtractor supports 23 or 29 joints for g1, got {num_joints}.")
 
         self.robot_type = "g1"
+        self.num_joints = num_joints
         repo_base = pathlib.Path(__file__).absolute().parents[3]
 
-        self.joint_config = JointConfig(
-            num_joints=29,
-            left_leg_indices={"hip_yaw": 2, "hip_roll": 1, "hip_pitch": 0, "knee": 3, "ankle_pitch": 4, "ankle_roll": 5},
-            right_leg_indices={"hip_yaw": 8, "hip_roll": 7, "hip_pitch": 6, "knee": 9, "ankle_pitch": 10, "ankle_roll": 11},
-            left_arm_indices={
-                "shoulder_pitch": 15,
-                "shoulder_roll": 16,
-                "shoulder_yaw": 17,
-                "elbow": 18,
-                "wrist_pitch": 19,
-                "wrist_roll": 20,
-                "wrist_yaw": 21,
-            },
-            right_arm_indices={
-                "shoulder_pitch": 22,
-                "shoulder_roll": 23,
-                "shoulder_yaw": 24,
-                "elbow": 25,
-                "wrist_pitch": 26,
-                "wrist_roll": 27,
-                "wrist_yaw": 28,
-            },
-            thigh_length=0.3,
-            calf_length=0.3,
-        )
-        self.mjcf_path = str(repo_base / "softmimic_deploy/src/assets/g1/g1_29dof_w_ghost.xml")
+        if num_joints == 29:
+            self.joint_config = JointConfig(
+                num_joints=29,
+                left_leg_indices={"hip_yaw": 2, "hip_roll": 1, "hip_pitch": 0, "knee": 3, "ankle_pitch": 4, "ankle_roll": 5},
+                right_leg_indices={"hip_yaw": 8, "hip_roll": 7, "hip_pitch": 6, "knee": 9, "ankle_pitch": 10, "ankle_roll": 11},
+                left_arm_indices={
+                    "shoulder_pitch": 15,
+                    "shoulder_roll": 16,
+                    "shoulder_yaw": 17,
+                    "elbow": 18,
+                    "wrist_pitch": 19,
+                    "wrist_roll": 20,
+                    "wrist_yaw": 21,
+                },
+                right_arm_indices={
+                    "shoulder_pitch": 22,
+                    "shoulder_roll": 23,
+                    "shoulder_yaw": 24,
+                    "elbow": 25,
+                    "wrist_pitch": 26,
+                    "wrist_roll": 27,
+                    "wrist_yaw": 28,
+                },
+                thigh_length=0.3,
+                calf_length=0.3,
+            )
+            self.mjcf_path = str(repo_base / "softmimic_deploy/src/assets/g1/g1_29dof_w_ghost.xml")
+        else:  # 23-DOF: waist roll/pitch and wrist pitch/yaw dropped.
+            self.joint_config = JointConfig(
+                num_joints=23,
+                left_leg_indices={"hip_yaw": 2, "hip_roll": 1, "hip_pitch": 0, "knee": 3, "ankle_pitch": 4, "ankle_roll": 5},
+                right_leg_indices={"hip_yaw": 8, "hip_roll": 7, "hip_pitch": 6, "knee": 9, "ankle_pitch": 10, "ankle_roll": 11},
+                left_arm_indices={
+                    "shoulder_pitch": 13,
+                    "shoulder_roll": 14,
+                    "shoulder_yaw": 15,
+                    "elbow": 16,
+                    "wrist_roll": 17,
+                },
+                right_arm_indices={
+                    "shoulder_pitch": 18,
+                    "shoulder_roll": 19,
+                    "shoulder_yaw": 20,
+                    "elbow": 21,
+                    "wrist_roll": 22,
+                },
+                thigh_length=0.3,
+                calf_length=0.3,
+            )
+            self.mjcf_path = str(repo_base / "softmimic_deploy/src/assets/g1/g1_23dof.xml")
 
         self.model = mujoco.MjModel.from_xml_path(self.mjcf_path)
         self.data = mujoco.MjData(self.model)

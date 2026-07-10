@@ -352,12 +352,14 @@ class ProceduralMotionLibFromDemo:
     def precompute_keypoints(self):
         from softmimic_deploy.src.motion_lib.keypoint_extractor import KeypointExtractor
 
-        if self.joint_config.num_joints != 29:
+        if self.joint_config.num_joints not in (23, 29):
             raise ValueError(
                 f"Unsupported joint configuration with {self.joint_config.num_joints} joints. "
-                "This deployment expects 29 joints for the G1 robot."
+                "This deployment expects 23 or 29 joints for the G1 robot."
             )
-        keypoint_extractor = KeypointExtractor(robot_type="g1")
+        keypoint_extractor = KeypointExtractor(
+            robot_type="g1", num_joints=self.joint_config.num_joints
+        )
         # Precompute keypoints for the entire dataset
         batch_size = 1000
         num_batches = (self.num_total_frames + batch_size - 1) // batch_size

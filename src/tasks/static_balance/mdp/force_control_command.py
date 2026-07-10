@@ -10,6 +10,13 @@ hide the gizmo and stop targeting a body (viser allows only one scene pointer
 callback, so background clicks cannot deselect without breaking orbit).
 Does not contribute to observations — add to cfg.commands in play mode only.
 
+Alongside the linear force, a restoring torque pulls the body back toward
+its orientation at drag-start, scaled with the applied force magnitude (same
+force_scale/force_max ratio, via ``torque_scale``/``torque_max``). This
+approximates the rotational half of the reactive spring wrench used during
+training (see ``apply_forcefield_wrench`` / ``ff_rotational_stiffness``),
+which the gizmo has no direct control for since it only exposes translation.
+
 Coordinate note: viser's scene is offset by -tracked_body_pos so the camera
 target stays centred. All viser positions (gizmo, arrow, ray) live in this
 offset frame; body positions from entity data are in MuJoCo world frame and
@@ -26,6 +33,7 @@ import numpy as np
 import torch
 
 from mjlab.managers.command_manager import CommandTerm, CommandTermCfg
+from mjlab.utils.lab_api.math import axis_angle_from_quat, quat_inv, quat_mul
 
 if TYPE_CHECKING:
   import viser
@@ -111,6 +119,7 @@ class ForceControlCommand(CommandTerm):
     self._selected_body_name: str = ""
     self._is_dragging: bool = False
     self._pending_force: np.ndarray = np.zeros(3)
+    self._drag_start_quat_w: torch.Tensor | None = None
     self._follow_counter: int = 0
 
   @property
@@ -220,6 +229,11 @@ class ForceControlCommand(CommandTerm):
     @self._gizmo.on_drag_start
     def _(_: "viser.TransformControlsEvent") -> None:
       self._is_dragging = True
+      if self._selected_body_idx is not None:
+        robot = self._env.scene[self.cfg.entity_name]
+        self._drag_start_quat_w = robot.data.body_link_quat_w[
+          0, self._selected_body_idx
+        ].clone()
 
     @self._gizmo.on_update
     def _(_: "viser.TransformControlsEvent") -> None:
@@ -239,6 +253,7 @@ class ForceControlCommand(CommandTerm):
     def _(_: "viser.TransformControlsEvent") -> None:
       self._is_dragging = False
       self._pending_force = np.zeros(3)
+      self._drag_start_quat_w = None
       self._clear_wrench()
       self._hide_arrow()
       if self._force_label is not None:
@@ -274,6 +289,7 @@ class ForceControlCommand(CommandTerm):
     """Hide gizmo, clear sim wrench, reset labels. Pointer mode unchanged."""
     self._is_dragging = False
     self._pending_force = np.zeros(3)
+    self._drag_start_quat_w = None
     self._selected_body_idx = None
     self._selected_body_name = ""
     self._clear_wrench()
@@ -331,6 +347,25 @@ class ForceControlCommand(CommandTerm):
     forces[0, self._selected_body_idx] = torch.tensor(
       force_vec, device=self.device, dtype=torch.float32
     )
+
+    # Restoring torque toward the orientation at drag-start, scaled with the
+    # applied force so a single grabbed link can't freely torque the whole
+    # kinematic chain (approximates the rotational half of the training-time
+    # reactive forcefield wrench, which this gizmo has no direct control for).
+    if self._drag_start_quat_w is not None:
+      body_quat_w = robot.data.body_link_quat_w[0, self._selected_body_idx]
+      delta = quat_mul(self._drag_start_quat_w, quat_inv(body_quat_w))
+      torque_dir = axis_angle_from_quat(delta.unsqueeze(0)).squeeze(0)
+      torque_mag = min(
+        self.cfg.torque_scale * force_mag / max(self.cfg.force_max, 1e-6),
+        self.cfg.torque_max,
+      )
+      torque_norm = torch.linalg.norm(torque_dir)
+      if torque_norm > 1e-6:
+        torques[0, self._selected_body_idx] = (
+          torque_dir / torque_norm
+        ) * torque_mag
+
     env_ids = torch.tensor([0], device=self.device)
     robot.write_external_wrench_to_sim(forces, torques, env_ids=env_ids)
 
@@ -397,6 +432,11 @@ class ForceControlCommandCfg(CommandTermCfg):
   entity_name: str
   force_scale: float = 150.0       # N per metre of gizmo displacement
   force_max: float = 100.0         # N — force is clamped to this
+  # Restoring torque toward the drag-start orientation, scaled with the
+  # applied force. Defaults mirror SoftMimic Table IV's force/torque cap
+  # ratio (140 N : 10 Nm) used by the training-time reactive forcefield.
+  torque_scale: float = 10.0       # Nm at force_max, scaled linearly below it
+  torque_max: float = 10.0         # Nm — torque is clamped to this
   max_arrow_length: float = 0.5    # visual arrow length at force_max
   arrow_shaft_radius: float = 0.012
   arrow_head_height: float = 0.08

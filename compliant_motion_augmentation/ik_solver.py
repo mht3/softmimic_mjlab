@@ -13,6 +13,7 @@ from softmimic_deploy.src.motion_lib.motion_lib_from_multi_csv import (
     ProceduralMotionLibFromDemo,
 )
 
+from . import constants
 from .constants import FORCEABLE_LINKS, FOOT_NAMES, KEYPOINT_BODY_NAMES
 from .tasks import KneeBendingTask
 
@@ -35,6 +36,10 @@ class G1_Mink_IK_Solver:
         if mink is None:
             raise ImportError("The 'mink' library is required for G1_Mink_IK_Solver.")
         self.model = mujoco.MjModel.from_xml_path(model_path)
+        # Retarget the module-level force/keypoint link lists to bodies that
+        # exist in this model (no-op on 29-DOF; swaps wrist-yaw links for the
+        # wrist-roll hands on the 23-DOF G1) before any IK task is built.
+        constants.configure_links_for_model(self.model)
         self.configuration = mink.Configuration(self.model)
         self.data = self.configuration.data
         self.total_mass = sum(self.model.body_mass)
@@ -60,17 +65,17 @@ class G1_Mink_IK_Solver:
             waist_cost_vector = np.zeros(self.model.nv)
             found_joints = []
             for name in waist_joint_names:
-                try:
-                    joint_id = mujoco.mj_name2id(
-                        self.model, mujoco.mjtObj.mjOBJ_JOINT, name
-                    )
-                    dof_adr = self.model.jnt_dofadr[joint_id]
-                    waist_cost_vector[dof_adr] = waist_cost
-                    found_joints.append(name)
-                except KeyError:
+                # mj_name2id returns -1 (it does not raise) for a joint that is
+                # absent from the model, e.g. waist roll/pitch on the 23-DOF G1.
+                joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
+                if joint_id == -1:
                     print(
                         f"Warning: Waist joint '{name}' not found in model. Skipping for waist task."
                     )
+                    continue
+                dof_adr = self.model.jnt_dofadr[joint_id]
+                waist_cost_vector[dof_adr] = waist_cost
+                found_joints.append(name)
             if found_joints:
                 self.waist_task = mink.PostureTask(self.model, cost=waist_cost_vector)
 
@@ -95,17 +100,17 @@ class G1_Mink_IK_Solver:
             upper_cost_vector = np.zeros(self.model.nv)
             found_joints = []
             for name in upper_joint_names:
-                try:
-                    joint_id = mujoco.mj_name2id(
-                        self.model, mujoco.mjtObj.mjOBJ_JOINT, name
-                    )
-                    dof_adr = self.model.jnt_dofadr[joint_id]
-                    upper_cost_vector[dof_adr] = upper_joint_cost
-                    found_joints.append(name)
-                except KeyError:
+                # mj_name2id returns -1 (it does not raise) for a joint that is
+                # absent from the model, e.g. wrist pitch/yaw on the 23-DOF G1.
+                joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, name)
+                if joint_id == -1:
                     print(
                         f"Warning: Upper joint '{name}' not found in model. Skipping for upper task."
                     )
+                    continue
+                dof_adr = self.model.jnt_dofadr[joint_id]
+                upper_cost_vector[dof_adr] = upper_joint_cost
+                found_joints.append(name)
             if found_joints:
                 self.upper_task = mink.PostureTask(self.model, cost=upper_cost_vector)
 
@@ -155,28 +160,41 @@ class G1_Mink_IK_Solver:
             self._load_motion(motion_path)
         self._initialize_reference_pose()
 
-    def _load_motion(self, motion_path: str):
-        if ProceduralMotionLibFromDemo is None or not os.path.exists(motion_path):
-            return
-        print(f"Loading reference motion from: {motion_path}")
-        joint_config = JointConfig(
+    def _build_joint_config(self) -> "JointConfig":
+        """Build the reference-CSV JointConfig for this model's DOF count.
+
+        The leg block is identical across the 23- and 29-DOF G1; only the arm
+        block differs (23-DOF drops the wrist pitch/yaw joints and the waist
+        roll/pitch joints), which shifts the arm column indices.
+        """
+        left_leg = {"hip_yaw": 2, "hip_roll": 1, "hip_pitch": 0, "knee": 3, "ankle_pitch": 4, "ankle_roll": 5}
+        right_leg = {"hip_yaw": 8, "hip_roll": 7, "hip_pitch": 6, "knee": 9, "ankle_pitch": 10, "ankle_roll": 11}
+        if self.num_dofs == 23:
+            return JointConfig(
+                num_joints=23,
+                left_leg_indices=left_leg,
+                right_leg_indices=right_leg,
+                left_arm_indices={
+                    "shoulder_pitch": 13,
+                    "shoulder_roll": 14,
+                    "shoulder_yaw": 15,
+                    "elbow": 16,
+                    "wrist_roll": 17,
+                },
+                right_arm_indices={
+                    "shoulder_pitch": 18,
+                    "shoulder_roll": 19,
+                    "shoulder_yaw": 20,
+                    "elbow": 21,
+                    "wrist_roll": 22,
+                },
+                thigh_length=0.3,
+                calf_length=0.3,
+            )
+        return JointConfig(
             num_joints=29,
-            left_leg_indices={
-                "hip_yaw": 2,
-                "hip_roll": 1,
-                "hip_pitch": 0,
-                "knee": 3,
-                "ankle_pitch": 4,
-                "ankle_roll": 5,
-            },
-            right_leg_indices={
-                "hip_yaw": 8,
-                "hip_roll": 7,
-                "hip_pitch": 6,
-                "knee": 9,
-                "ankle_pitch": 10,
-                "ankle_roll": 11,
-            },
+            left_leg_indices=left_leg,
+            right_leg_indices=right_leg,
             left_arm_indices={
                 "shoulder_pitch": 15,
                 "shoulder_roll": 16,
@@ -198,6 +216,18 @@ class G1_Mink_IK_Solver:
             thigh_length=0.3,
             calf_length=0.3,
         )
+
+    def _load_motion(self, motion_path: str):
+        if not os.path.exists(motion_path):
+            # Never fall back silently: get_reference_motion() would replace the
+            # requested motion with a static stand pose and the generated data
+            # would look plausible while containing no motion at all.
+            raise FileNotFoundError(
+                f"Reference motion CSV not found: '{motion_path}' "
+                f"(cwd: {os.getcwd()})"
+            )
+        print(f"Loading reference motion from: {motion_path}")
+        joint_config = self._build_joint_config()
         self.motion_lib = ProceduralMotionLibFromDemo(
             input_path=motion_path,
             device="cpu",

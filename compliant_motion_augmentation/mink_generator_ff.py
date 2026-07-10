@@ -40,8 +40,11 @@ def main():
         return
 
     script_dir = os.path.dirname(os.path.realpath(__file__))
+    # Solve IK on the 23-DOF robot we deploy. The reference CSV must be a 23-DOF
+    # motion (see scripts/csv_29dof_to_23dof.py); pass --model_path with the
+    # 29-DOF XML to run the legacy 29-DOF pipeline against a 29-DOF CSV.
     default_model_path = os.path.abspath(
-        os.path.join(script_dir, "../softmimic_deploy/src/assets/g1/g1_29dof.xml")
+        os.path.join(script_dir, "../softmimic_deploy/src/assets/g1/g1_23dof.xml")
     )
 
     parser = argparse.ArgumentParser(

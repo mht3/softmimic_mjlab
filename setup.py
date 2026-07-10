@@ -5,6 +5,7 @@ from setuptools import setup, find_packages
 # Minimum dependencies required prior to installation
 INSTALL_REQUIRES = [
     "mjlab==1.2.0",
+    "mujoco==3.8.1",
     "pandas>=1.5",
     "tqdm>=4.65",
     "scipy>=1.10",

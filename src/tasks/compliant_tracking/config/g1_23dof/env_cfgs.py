@@ -1,4 +1,4 @@
-"""Unitree G1_23Dof flat tracking environment configurations."""
+"""Unitree G1_23Dof flat compliant tracking environment configurations."""
 
 from src.assets.robots.unitree_g1.g1_23dof_constants import (
   G1_23DOF_ACTION_SCALE,
@@ -8,37 +8,50 @@ from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
 from mjlab.managers.observation_manager import ObservationGroupCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
-from mjlab.tasks.tracking.mdp import MotionCommandCfg
 
-from src.tasks.tracking.tracking_env_cfg import make_tracking_env_cfg
+from src.tasks.compliant_tracking.mdp import CompliantMotionCommandCfg
+from src.tasks.compliant_tracking.tracking_env_cfg import (
+  make_compliant_tracking_env_cfg,
+)
+from src.tasks.static_balance.mdp.force_control_command import ForceControlCommandCfg
+from src.tasks.static_balance.mdp.push_control_command import PushControlCommandCfg
 
 
-def unitree_g1_23dof_flat_tracking_env_cfg(
+def unitree_g1_23dof_flat_compliant_tracking_env_cfg(
   has_state_estimation: bool = True,
   play: bool = False,
+  history_length: int = 3,
+  velocity_conditioning: bool = False,
 ) -> ManagerBasedRlEnvCfg:
-  """Create Unitree G1_23Dof flat terrain tracking configuration."""
-  cfg = make_tracking_env_cfg()
+  """Create Unitree G1_23Dof flat terrain compliant tracking configuration."""
+  cfg = make_compliant_tracking_env_cfg(
+    history_length=history_length, velocity_conditioning=velocity_conditioning
+  )
 
   cfg.scene.entities = {"robot": get_g1_23dof_robot_cfg()}
 
-  self_collision_cfg = ContactSensorCfg(
-    name="self_collision",
-    primary=ContactMatch(mode="subtree", pattern="pelvis", entity="robot"),
-    secondary=ContactMatch(mode="subtree", pattern="pelvis", entity="robot"),
+  # No self-collision sensor: the self-collision penalty is disabled to match
+  # SoftMimic's reward set.
+  feet_ground_cfg = ContactSensorCfg(
+    name="feet_ground_contact",
+    primary=ContactMatch(
+      mode="subtree",
+      pattern=r"^(left_ankle_roll_link|right_ankle_roll_link)$",
+      entity="robot",
+    ),
+    secondary=ContactMatch(mode="body", pattern="terrain"),
     fields=("found", "force"),
-    reduce="none",
+    reduce="netforce",
     num_slots=1,
-    history_length=4,
   )
-  cfg.scene.sensors = (self_collision_cfg,)
+  cfg.scene.sensors = (feet_ground_cfg,)
 
   joint_pos_action = cfg.actions["joint_pos"]
   assert isinstance(joint_pos_action, JointPositionActionCfg)
   joint_pos_action.scale = G1_23DOF_ACTION_SCALE
 
   motion_cmd = cfg.commands["motion"]
-  assert isinstance(motion_cmd, MotionCommandCfg)
+  assert isinstance(motion_cmd, CompliantMotionCommandCfg)
   motion_cmd.anchor_body_name = "torso_link"
   motion_cmd.body_names = (
     "pelvis",
@@ -61,6 +74,7 @@ def unitree_g1_23dof_flat_tracking_env_cfg(
     "asset_cfg"
   ].geom_names = r"^(left|right)_foot[1-7]_collision$"
   cfg.events["base_com"].params["asset_cfg"].body_names = ("torso_link",)
+  cfg.events["payload_mass"].params["asset_cfg"].body_names = ("torso_link",)
 
   cfg.terminations["ee_body_pos"].params["body_names"] = (
     "left_ankle_roll_link",
@@ -89,8 +103,32 @@ def unitree_g1_23dof_flat_tracking_env_cfg(
     # Effectively infinite episode length.
     cfg.episode_length_s = int(1e9)
 
+    cfg.sim.nconmax = None
+
     cfg.observations["actor"].enable_corruption = False
-    cfg.events.pop("push_robot", None)
+
+    # Interactive sandbox. The dataset forcefield event stays registered but is
+    # gated by the command's `dataset_forces_enabled` GUI toggle (off by
+    # default), so by default the viser Force/Push panels own the external
+    # wrench. Step events run after the command manager, so when the toggle is
+    # on the dataset wrench takes precedence — letting you replay training
+    # forces exactly. `create_gui()` sets the toggle off at startup.
+    cfg.commands["push_control"] = PushControlCommandCfg(
+      entity_name="robot",
+      resampling_time_range=(1.0e9, 1.0e9),
+      # Manual mode, sliders at zero — no automatic pushes.
+      manual_by_default=True,
+    )
+    cfg.commands["force_control"] = ForceControlCommandCfg(
+      entity_name="robot",
+      resampling_time_range=(1.0e9, 1.0e9),
+      # SoftMimic Table IV: 140 N / 10 Nm peak force/torque at the 0.7 m
+      # displacement limit.
+      force_scale=200.0,
+      force_max=140.0,
+      torque_scale=10.0,
+      torque_max=10.0,
+    )
 
     # Disable RSI randomization.
     motion_cmd.pose_range = {}

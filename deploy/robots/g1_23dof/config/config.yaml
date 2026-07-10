@@ -96,6 +96,21 @@ FSM:
   #   time_start: 0.0
   #   time_end: 500.0
 
+  # SoftMimic compliant tracking policy. desired_stiffness [40, 1000] N/m and
+  # desired_rotational_stiffness [0.1, 10] Nm/rad are observed by the policy;
+  # adjust online with the d-pad (up/down: translational, left/right: rotational).
+  # Mimic_Compliant_Stand:
+  #   transitions:
+  #     Passive: LT + B.on_pressed
+  #     Velocity: RT + A.on_pressed
+  #   limit_angle: 1.0
+  #   motion_file: config/policy/compliant_mimic/stand/params/stand_nominal.npz
+  #   policy_dir: config/policy/compliant_mimic/stand
+  #   desired_stiffness: 200.0
+  #   desired_rotational_stiffness: 1.0
+  #   time_start: 0.0
+  #   time_end: 500.0
+
   Static_Balance:
     transitions:
       Passive: LT + B.on_pressed

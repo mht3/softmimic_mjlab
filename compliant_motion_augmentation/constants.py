@@ -26,6 +26,42 @@ KEYPOINT_BODY_NAMES = [
 
 FOOT_NAMES = ["left_ankle_roll_link", "right_ankle_roll_link"]
 
+# The 23-DOF G1 drops the wrist pitch/yaw joints, so the arm ends in the
+# wrist-roll hand rather than the wrist-yaw link. Map the 29-DOF end-effector
+# names onto their nearest 23-DOF equivalents so the same force/keypoint tasks
+# work on either model.
+_29DOF_TO_23DOF_LINK = {
+    "left_wrist_yaw_link": "left_wrist_roll_rubber_hand",
+    "right_wrist_yaw_link": "right_wrist_roll_rubber_hand",
+}
+
+
+def configure_links_for_model(model) -> None:
+    """Retarget the module-level link lists to bodies that exist in ``model``.
+
+    The augmentation modules read ``FORCEABLE_LINKS`` / ``KEYPOINT_BODY_NAMES``
+    at task-construction time, so calling this once (before the IK tasks are
+    built) is enough to make the whole pipeline work on the 23-DOF model. It is
+    a no-op on the 29-DOF model, where every default link already exists.
+    """
+    import mujoco
+
+    def _exists(name: str) -> bool:
+        return mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, name) != -1
+
+    def _remap(name: str) -> str:
+        if _exists(name):
+            return name
+        alt = _29DOF_TO_23DOF_LINK.get(name)
+        if alt is not None and _exists(alt):
+            return alt
+        return name
+
+    FORCEABLE_LINKS[:] = [_remap(n) for n in FORCEABLE_LINKS]
+    KEYPOINT_BODY_NAMES[:] = [_remap(n) for n in KEYPOINT_BODY_NAMES]
+    DOWNWARD_ONLY_FORCEABLE_LINKS[:] = [_remap(n) for n in DOWNWARD_ONLY_FORCEABLE_LINKS]
+    FOOT_NAMES[:] = [_remap(n) for n in FOOT_NAMES]
+
 MAX_RELEASE_LINEAR_VEL = 1.0  # m/s
 MAX_RELEASE_ANGULAR_VEL = 2.0  # rad/s
 TELEPORT_THRESHOLD = 1.0  # m

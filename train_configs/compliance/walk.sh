@@ -1,0 +1,37 @@
+#!/bin/bash
+# Compliant tracking training on the augmented walk dataset (Unitree G1 23dof).
+#
+# Defaults to the velocity-conditioned task so the resulting policy can be
+# steered with the GUI velocity joystick in play.py (see README "Compliant
+# Tracking (SoftMimic)"). Override TASK to train the non-steerable variant:
+#   TASK=Unitree-G1-23Dof-Compliant-Tracking-No-State-Estimation \
+#     bash train_configs/compliance/walk.sh
+#
+# Requires the walk augmentations converted to NPZ first (see README
+# "Compliant Tracking (SoftMimic)" section).
+#
+# Usage:
+#   bash train_configs/compliance/walk.sh
+#   bash train_configs/compliance/walk.sh --agent.run-name my_experiment
+
+set -e
+
+TASK="${TASK:-Unitree-G1-23Dof-Compliant-Tracking-Velocity}"
+
+# --- Environment ---
+NUM_ENVS=4096
+
+# --- Agent ---
+MAX_ITERATIONS=50001
+LEARNING_RATE=1e-3
+NUM_STEPS_PER_ENV=24
+
+
+
+python scripts/train.py "$TASK" \
+  --motion_file=src/assets/compliant_motions/g1_23dof/walk \
+  --env.scene.num-envs "$NUM_ENVS" \
+  --agent.max-iterations "$MAX_ITERATIONS" \
+  --agent.algorithm.learning-rate "$LEARNING_RATE" \
+  --agent.num-steps-per-env "$NUM_STEPS_PER_ENV" \
+  "$@"

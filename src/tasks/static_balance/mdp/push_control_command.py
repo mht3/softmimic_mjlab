@@ -37,7 +37,13 @@ class PushControlCommand(CommandTerm):
     super().__init__(cfg, env)
     self._sliders: dict[str, "viser.GuiSliderHandle"] = {}
     self._enabled: "viser.GuiCheckboxHandle | None" = None
+    self._push_btn: "viser.GuiButtonHandle | None" = None
+    self._reset_btn: "viser.GuiButtonHandle | None" = None
     self._auto_push_countdown: int = -1  # -1 = GUI not yet created
+    # When False, the command is inert (no auto/manual pushes) and its controls
+    # are greyed out. Used to hand perturbation control to the dataset forces
+    # while augmented motions play.
+    self._controls_active: bool = True
 
   @property
   def command(self) -> torch.Tensor:
@@ -48,8 +54,9 @@ class PushControlCommand(CommandTerm):
     pass
 
   def _update_command(self) -> None:
-    # No-op until GUI is created or manual mode is active.
-    if self._enabled is None or self._enabled.value:
+    # No-op until GUI is created, when handed off (augmented motions), or when
+    # in manual mode (pushes only fire from the button).
+    if self._enabled is None or not self._controls_active or self._enabled.value:
       return
     self._auto_push_countdown -= 1
     if self._auto_push_countdown <= 0:
@@ -86,7 +93,9 @@ class PushControlCommand(CommandTerm):
     }
 
     with server.gui.add_folder("Push Control"):
-      self._enabled = server.gui.add_checkbox("Manual", initial_value=False)
+      self._enabled = server.gui.add_checkbox(
+        "Manual", initial_value=self.cfg.manual_by_default
+      )
 
       for axis in _ALL_AXES:
         m = slider_maxes[axis]
@@ -99,13 +108,16 @@ class PushControlCommand(CommandTerm):
         )
 
       push_btn = server.gui.add_button("Push", icon=Icon.ARROW_RIGHT)
-      push_btn.disabled = True  # only active in manual mode
+      push_btn.disabled = not self.cfg.manual_by_default  # only active in manual mode
+      self._push_btn = push_btn
 
       reset_btn = server.gui.add_button("Reset", icon=Icon.REFRESH)
+      self._reset_btn = reset_btn
 
       @self._enabled.on_update
       def _(ev: "viser.GuiUpdateEvent[viser.GuiCheckboxHandle]") -> None:
-        push_btn.disabled = not ev.target.value
+        # Manual toggle only enables the push button while controls are active.
+        push_btn.disabled = not ev.target.value or not self._controls_active
 
       @push_btn.on_click
       def _(_) -> None:
@@ -119,6 +131,21 @@ class PushControlCommand(CommandTerm):
 
     # Start auto-push countdown after GUI is fully set up.
     self._reset_countdown()
+
+  def set_controls_active(self, active: bool) -> None:
+    """Enable/disable the push controls (and auto/manual pushes).
+
+    Used to hand perturbation control to the dataset forcefield while augmented
+    motions play. Greys out the folder's controls so the state is obvious.
+    """
+    self._controls_active = active
+    for handle in (self._enabled, self._reset_btn, *self._sliders.values()):
+      if handle is not None:
+        handle.disabled = not active
+    if self._push_btn is not None:
+      # Push button also requires manual mode.
+      manual = self._enabled is not None and self._enabled.value
+      self._push_btn.disabled = not active or not manual
 
   def _reset_countdown(self) -> None:
     interval_s = random.uniform(*self.cfg.push_interval_s)
@@ -177,6 +204,8 @@ class PushControlCommandCfg(CommandTermCfg):
   slider_max_z: float = 0.5
   slider_max_ang: float = 1.5
   push_interval_s: tuple[float, float] = field(default_factory=lambda: (2.0, 5.0))
+  manual_by_default: bool = False
+  """Start in manual mode (no automatic pushes, sliders at zero)."""
 
   def build(self, env: ManagerBasedRlEnv) -> PushControlCommand:
     return PushControlCommand(self, env)

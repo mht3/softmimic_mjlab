@@ -864,6 +864,23 @@ def main():
     env_cfg.events["reset_rp_noise"].params["rp_range"] = 0.0
 
   has_push = hasattr(env_cfg, "events") and "push_robot" in (env_cfg.events or {})
+  if not has_push and is_tracking:
+    # Tracking tasks trained without random pushes (e.g. compliant tracking)
+    # still get the push sweep: inject a zeroed push event that the per-level
+    # loop below reconfigures.
+    from mjlab.envs.mdp import push_by_setting_velocity
+    from mjlab.managers.event_manager import EventTermCfg
+
+    env_cfg.events["push_robot"] = EventTermCfg(
+      func=push_by_setting_velocity,
+      mode="interval",
+      interval_range_s=(2.0, 5.0),
+      params={
+        "velocity_range": {k: (0.0, 0.0) for k in ("x", "y", "z", "roll", "pitch", "yaw")}
+      },
+    )
+    has_push = True
+    print("[eval] Injected push_robot event for perturbation sweep.")
   if not has_push:
     print("[WARN] Task has no push_robot event; only evaluating without perturbation.")
     args.levels = ["none"]

@@ -1,13 +1,16 @@
-"""Motion mimic task configuration.
+"""Compliant motion mimic task configuration.
 
-This module defines the base configuration for motion mimic tasks.
-Robot-specific configurations are located in the config/ directory.
+SoftMimic-style compliant tracking: the robot imitates *adapted* reference
+motions from the compliant motion augmentation pipeline while the matching
+external wrench is applied to the force-target body. Soft reward terms make
+the policy reproduce the demonstrated interaction forces instead of stiffly
+rejecting them.
 
-This is a re-implementation of BeyondMimic (https://beyondmimic.github.io/).
-
-Based on https://github.com/HybridRobotics/whole_body_tracking
-Commit: f8e20c880d9c8ec7172a13d3a88a65e3a5a88448
+Based on the BeyondMimic tracking task in ``src/tasks/tracking`` and the
+SoftMimic Isaac Lab release (https://github.com/Improbable-AI/softmimic).
 """
+
+import math
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp import dr
@@ -21,92 +24,186 @@ from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.managers.termination_manager import TerminationTermCfg
 from mjlab.scene import SceneCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
-from mjlab.tasks.tracking import mdp
-from mjlab.tasks.tracking.mdp import MotionCommandCfg
 from mjlab.terrains import TerrainEntityCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
 
-import src.tasks.tracking.mdp as mdp
+import src.tasks.compliant_tracking.mdp as mdp
+from src.tasks.compliant_tracking.mdp import CompliantMotionCommandCfg
 
-VELOCITY_RANGE = {
-  "x": (-0.5, 0.5),
-  "y": (-0.5, 0.5),
-  "z": (-0.2, 0.2),
-  "roll": (-0.52, 0.52),
-  "pitch": (-0.52, 0.52),
-  "yaw": (-0.78, 0.78),
-}
+def make_compliant_tracking_env_cfg(
+  history_length: int = 3, velocity_conditioning: bool = False
+) -> ManagerBasedRlEnvCfg:
+  """Create base compliant tracking task configuration.
 
-
-def make_tracking_env_cfg() -> ManagerBasedRlEnvCfg:
-  """Create base tracking task configuration."""
+  Args:
+    history_length: Number of past frames stacked into every observation term
+      (SoftMimic Table III uses 3).
+    velocity_conditioning: If True, add the reference root velocity (heading
+      frame) as an actor+critic observation. This lets the policy be steered
+      by a velocity command (GUI joystick at play time), mirroring SoftMimic's
+      ``reference_xy_vel`` / ``reference_yaw_vel`` conditioning. It changes the
+      observation dimension, so checkpoints are not compatible across the flag.
+  """
 
   ##
   # Observations
   ##
 
+  # SoftMimic Table III: 3-step history on proprioception, reference motion,
+  # action, and the desired-stiffness command (log scale). Noise ranges follow
+  # Table V. The 20-point future reference horizon is not (yet) ported.
   actor_terms = {
     "command": ObservationTermCfg(
-      func=mdp.generated_commands, params={"command_name": "motion"}
+      func=mdp.generated_commands,
+      params={"command_name": "motion"},
+      history_length=history_length,
     ),
     "motion_anchor_pos_b": ObservationTermCfg(
       func=mdp.motion_anchor_pos_b,
       params={"command_name": "motion"},
       noise=Unoise(n_min=-0.25, n_max=0.25),
+      history_length=history_length,
     ),
     "motion_anchor_ori_b": ObservationTermCfg(
       func=mdp.motion_anchor_ori_b,
       params={"command_name": "motion"},
       noise=Unoise(n_min=-0.05, n_max=0.05),
+      history_length=history_length,
     ),
     "base_lin_vel": ObservationTermCfg(
       func=mdp.builtin_sensor,
       params={"sensor_name": "robot/imu_lin_vel"},
       noise=Unoise(n_min=-0.5, n_max=0.5),
+      history_length=history_length,
     ),
     "base_ang_vel": ObservationTermCfg(
       func=mdp.builtin_sensor,
       params={"sensor_name": "robot/imu_ang_vel"},
       noise=Unoise(n_min=-0.2, n_max=0.2),
+      history_length=history_length,
     ),
     "joint_pos": ObservationTermCfg(
       func=mdp.joint_pos_rel,
       noise=Unoise(n_min=-0.01, n_max=0.01),
       params={"biased": True},
+      history_length=history_length,
     ),
     "joint_vel": ObservationTermCfg(
-      func=mdp.joint_vel_rel, noise=Unoise(n_min=-0.5, n_max=0.5)
+      func=mdp.joint_vel_rel,
+      noise=Unoise(n_min=-1.5, n_max=1.5),
+      history_length=history_length,
     ),
-    "actions": ObservationTermCfg(func=mdp.last_action),
+    "actions": ObservationTermCfg(func=mdp.last_action, history_length=history_length),
+    "desired_stiffness_log": ObservationTermCfg(
+      func=mdp.desired_stiffness_log,
+      params={"command_name": "motion"},
+      history_length=history_length,
+    ),
+    "desired_rotational_stiffness_log": ObservationTermCfg(
+      func=mdp.desired_rotational_stiffness_log,
+      params={"command_name": "motion"},
+      history_length=history_length,
+    ),
   }
 
   critic_terms = {
     "command": ObservationTermCfg(
-      func=mdp.generated_commands, params={"command_name": "motion"}
+      func=mdp.generated_commands,
+      params={"command_name": "motion"},
+      history_length=history_length,
     ),
     "motion_anchor_pos_b": ObservationTermCfg(
-      func=mdp.motion_anchor_pos_b, params={"command_name": "motion"}
+      func=mdp.motion_anchor_pos_b,
+      params={"command_name": "motion"},
+      history_length=history_length,
     ),
     "motion_anchor_ori_b": ObservationTermCfg(
-      func=mdp.motion_anchor_ori_b, params={"command_name": "motion"}
+      func=mdp.motion_anchor_ori_b,
+      params={"command_name": "motion"},
+      history_length=history_length,
     ),
     "body_pos": ObservationTermCfg(
-      func=mdp.robot_body_pos_b, params={"command_name": "motion"}
+      func=mdp.robot_body_pos_b,
+      params={"command_name": "motion"},
+      history_length=history_length,
     ),
     "body_ori": ObservationTermCfg(
-      func=mdp.robot_body_ori_b, params={"command_name": "motion"}
+      func=mdp.robot_body_ori_b,
+      params={"command_name": "motion"},
+      history_length=history_length,
     ),
     "base_lin_vel": ObservationTermCfg(
-      func=mdp.builtin_sensor, params={"sensor_name": "robot/imu_lin_vel"}
+      func=mdp.builtin_sensor,
+      params={"sensor_name": "robot/imu_lin_vel"},
+      history_length=history_length,
     ),
     "base_ang_vel": ObservationTermCfg(
-      func=mdp.builtin_sensor, params={"sensor_name": "robot/imu_ang_vel"}
+      func=mdp.builtin_sensor,
+      params={"sensor_name": "robot/imu_ang_vel"},
+      history_length=history_length,
     ),
-    "joint_pos": ObservationTermCfg(func=mdp.joint_pos_rel),
-    "joint_vel": ObservationTermCfg(func=mdp.joint_vel_rel),
-    "actions": ObservationTermCfg(func=mdp.last_action),
+    "joint_pos": ObservationTermCfg(func=mdp.joint_pos_rel, history_length=history_length),
+    "joint_vel": ObservationTermCfg(func=mdp.joint_vel_rel, history_length=history_length),
+    "actions": ObservationTermCfg(func=mdp.last_action, history_length=history_length),
+    # Privileged compliance state (SoftMimic).
+    "force_applied": ObservationTermCfg(
+      func=mdp.forcefield_force_applied,
+      params={"command_name": "motion"},
+      history_length=history_length,
+    ),
+    "torque_applied": ObservationTermCfg(
+      func=mdp.forcefield_torque_applied,
+      params={"command_name": "motion"},
+      history_length=history_length,
+    ),
+    "force_desired": ObservationTermCfg(
+      func=mdp.forcefield_force_desired,
+      params={"command_name": "motion"},
+      history_length=history_length,
+    ),
+    "torque_desired": ObservationTermCfg(
+      func=mdp.forcefield_torque_desired,
+      params={"command_name": "motion"},
+      history_length=history_length,
+    ),
+    "desired_stiffness_log": ObservationTermCfg(
+      func=mdp.desired_stiffness_log,
+      params={"command_name": "motion"},
+      history_length=history_length,
+    ),
+    "desired_rotational_stiffness_log": ObservationTermCfg(
+      func=mdp.desired_rotational_stiffness_log,
+      params={"command_name": "motion"},
+      history_length=history_length,
+    ),
+    "forcefield_stiffness_log": ObservationTermCfg(
+      func=mdp.forcefield_stiffness_log,
+      params={"command_name": "motion"},
+      history_length=history_length,
+    ),
+    "forcefield_rotational_stiffness_log": ObservationTermCfg(
+      func=mdp.forcefield_rotational_stiffness_log,
+      params={"command_name": "motion"},
+      history_length=history_length,
+    ),
   }
+
+  # Velocity conditioning: expose the reference root velocity (heading frame)
+  # to both actor and critic so the policy learns to follow a velocity command
+  # (steerable via the GUI joystick at play time).
+  if velocity_conditioning:
+    for terms in (actor_terms, critic_terms):
+      terms["reference_root_lin_vel_b"] = ObservationTermCfg(
+        func=mdp.reference_root_lin_vel_b,
+        params={"command_name": "motion"},
+        history_length=history_length,
+      )
+      terms["reference_root_ang_vel_b"] = ObservationTermCfg(
+        func=mdp.reference_root_ang_vel_b,
+        params={"command_name": "motion"},
+        history_length=history_length,
+      )
 
   observations = {
     "actor": ObservationGroupCfg(
@@ -139,20 +236,15 @@ def make_tracking_env_cfg() -> ManagerBasedRlEnvCfg:
   ##
 
   commands: dict[str, CommandTermCfg] = {
-    "motion": MotionCommandCfg(
+    "motion": CompliantMotionCommandCfg(
       entity_name="robot",
       resampling_time_range=(1.0e9, 1.0e9),
       debug_vis=True,
-      pose_range={
-        "x": (-0.05, 0.05),
-        "y": (-0.05, 0.05),
-        "z": (-0.01, 0.01),
-        "roll": (-0.1, 0.1),
-        "pitch": (-0.1, 0.1),
-        "yaw": (-0.2, 0.2),
-      },
-      velocity_range=VELOCITY_RANGE,
-      joint_position_range=(-0.1, 0.1),
+      pose_range={},
+      velocity_range={},
+      joint_position_range=(-0.2, 0.2),
+      sampling_mode="uniform",
+      force_computation_mode="forcefield",
       # Override in robot cfg.
       motion_file="",
       anchor_body_name="",
@@ -164,12 +256,33 @@ def make_tracking_env_cfg() -> ManagerBasedRlEnvCfg:
   # Events
   ##
 
+  # No random pushes during training: the dataset force events are the only
+  # perturbations (SoftMimic). Random pushes fight the onset-anchored
+  # forcefield spring and blow up the applied force.
   events: dict[str, EventTermCfg] = {
-    "push_robot": EventTermCfg(
-      func=mdp.push_by_setting_velocity,
-      mode="interval",
-      interval_range_s=(1.0, 3.0),
-      params={"velocity_range": VELOCITY_RANGE},
+    "apply_forcefield": EventTermCfg(
+      func=mdp.apply_forcefield_wrench,
+      mode="step",
+      params={"command_name": "motion"},
+    ),
+    # Payload mass and link mass scale follow SoftMimic Table V.
+    "payload_mass": EventTermCfg(
+      mode="startup",
+      func=dr.body_mass,
+      params={
+        "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set in robot cfg.
+        "operation": "add",
+        "ranges": (-2.0, 2.0),
+      },
+    ),
+    "link_mass_scale": EventTermCfg(
+      mode="startup",
+      func=dr.pseudo_inertia,
+      params={
+        "asset_cfg": SceneEntityCfg("robot", body_names=(".*",)),
+        # Mass/inertia scale = e^alpha, so this is a [0.7, 1.3] mass scale.
+        "alpha_range": (math.log(0.7), math.log(1.3)),
+      },
     ),
     "base_com": EventTermCfg(
       mode="startup",
@@ -192,13 +305,43 @@ def make_tracking_env_cfg() -> ManagerBasedRlEnvCfg:
         "bias_range": (-0.01, 0.01),
       },
     ),
+    # Joint parameter randomization (added), SoftMimic Table V.
+    "joint_damping": EventTermCfg(
+      mode="startup",
+      func=dr.joint_damping,
+      params={
+        "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+        "operation": "add",
+        "ranges": (0.0, 2.0),
+      },
+    ),
+    "joint_armature": EventTermCfg(
+      mode="startup",
+      func=dr.joint_armature,
+      params={
+        "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+        "operation": "add",
+        "ranges": (0.01, 0.1),
+      },
+    ),
+    "joint_friction": EventTermCfg(
+      mode="startup",
+      func=dr.joint_friction,
+      params={
+        "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
+        "operation": "add",
+        "ranges": (0.0, 0.01),
+      },
+    ),
+    # Foot geoms have contact priority over the terrain, so this IS the
+    # ground friction; range follows SoftMimic Table V.
     "foot_friction": EventTermCfg(
       mode="startup",
       func=dr.geom_friction,
       params={
         "asset_cfg": SceneEntityCfg("robot", geom_names=()),  # Set per-robot.
         "operation": "abs",
-        "ranges": (0.3, 1.2),
+        "ranges": (0.5, 2.0),
         "shared_random": True,  # All foot geoms share the same friction.
       },
     ),
@@ -208,53 +351,80 @@ def make_tracking_env_cfg() -> ManagerBasedRlEnvCfg:
   # Rewards
   ##
 
+  # Terms and weights follow SoftMimic Table VI (identical across tasks).
   rewards: dict[str, RewardTermCfg] = {
-    "motion_global_root_pos": RewardTermCfg(
-      func=mdp.motion_global_anchor_position_error_exp,
-      weight=0.5,
-      params={"command_name": "motion", "std": 0.3},
+    # -- Compliance --
+    "force_link_pos": RewardTermCfg(
+      func=mdp.force_link_position_tracking_exp,
+      weight=3.0,
+      params={"command_name": "motion", "sigma": 0.1},
     ),
-    "motion_global_root_ori": RewardTermCfg(
-      func=mdp.motion_global_anchor_orientation_error_exp,
-      weight=0.5,
-      params={"command_name": "motion", "std": 0.4},
+    "force_link_ori": RewardTermCfg(
+      func=mdp.force_link_orientation_tracking_exp,
+      weight=3.0,
+      params={"command_name": "motion", "sigma": 0.1},
     ),
+    "force_command_tracking": RewardTermCfg(
+      func=mdp.force_command_tracking,
+      weight=2.0,
+      params={"command_name": "motion", "sigma": 20.0},
+    ),
+    "torque_command_tracking": RewardTermCfg(
+      func=mdp.torque_command_tracking,
+      weight=2.0,
+      params={"command_name": "motion", "sigma": 2.0},
+    ),
+    # -- Motion tracking --
     "motion_body_pos": RewardTermCfg(
       func=mdp.motion_relative_body_position_error_exp,
-      weight=1.0,
+      weight=2.0,
       params={"command_name": "motion", "std": 0.3},
     ),
     "motion_body_ori": RewardTermCfg(
       func=mdp.motion_relative_body_orientation_error_exp,
-      weight=1.0,
+      weight=2.0,
       params={"command_name": "motion", "std": 0.4},
     ),
-    "motion_body_lin_vel": RewardTermCfg(
-      func=mdp.motion_global_body_linear_velocity_error_exp,
-      weight=1.0,
-      params={"command_name": "motion", "std": 1.0},
+    "motion_base_ori": RewardTermCfg(
+      func=mdp.motion_base_gravity_error_exp,
+      weight=0.5,
+      params={"command_name": "motion"},
     ),
-    "motion_body_ang_vel": RewardTermCfg(
-      func=mdp.motion_global_body_angular_velocity_error_exp,
-      weight=1.0,
-      params={"command_name": "motion", "std": 3.14},
+    "motion_base_lin_vel": RewardTermCfg(
+      func=mdp.motion_base_lin_vel_local_error_exp,
+      weight=0.5,
+      params={"command_name": "motion", "std": 0.5},
     ),
-    "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-1e-1),
-    "electrical_power": RewardTermCfg(
-      func=mdp.electrical_power_cost,
-      weight=-1e-4,
-      params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+    "motion_base_ang_vel": RewardTermCfg(
+      func=mdp.motion_base_ang_vel_local_error_exp,
+      weight=0.5,
+      params={"command_name": "motion", "std": 2.0},
     ),
+    # -- Stability --
+    "alive": RewardTermCfg(func=mdp.is_alive, weight=1.5),
     "joint_limit": RewardTermCfg(
       func=mdp.joint_pos_limits,
       weight=-10.0,
       params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
     ),
-    "self_collisions": RewardTermCfg(
-      func=mdp.self_collision_cost,
-      weight=-10.0,
-      params={"sensor_name": "self_collision", "force_threshold": 10.0},
+    "feet_slide": RewardTermCfg(
+      func=mdp.feet_slide_proportional,
+      weight=-0.005,
+      params={"sensor_name": "feet_ground_contact", "command_name": "motion"},
     ),
+    "joint_vel_l2": RewardTermCfg(
+      func=mdp.joint_vel_l2,
+      weight=-2.8e-4,
+      params={"asset_cfg": SceneEntityCfg("robot", joint_names=(".*",))},
+    ),
+    "action_rate_l2": RewardTermCfg(func=mdp.action_rate_l2, weight=-0.01),
+    "foot_contact_schedule": RewardTermCfg(
+      func=mdp.foot_contact_schedule_mismatch,
+      weight=-0.4,
+      params={"command_name": "motion", "sensor_name": "feet_ground_contact"},
+    ),
+    # No self-collision penalty, matching SoftMimic (they disable
+    # self-collision physics; here MuJoCo still resolves the contacts).
   }
 
   ##
@@ -308,7 +478,7 @@ def make_tracking_env_cfg() -> ManagerBasedRlEnvCfg:
     ),
     sim=SimulationCfg(
       nconmax=35,
-      njmax=250,
+      njmax=350,
       mujoco=MujocoCfg(
         timestep=0.005,
         iterations=10,
@@ -316,5 +486,6 @@ def make_tracking_env_cfg() -> ManagerBasedRlEnvCfg:
       ),
     ),
     decimation=4,
-    episode_length_s=10.0,
+    # SoftMimic uses 30 s episodes.
+    episode_length_s=30.0,
   )

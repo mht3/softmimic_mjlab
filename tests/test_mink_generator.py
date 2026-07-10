@@ -34,11 +34,34 @@ def generator_module():
     return importlib.import_module(module_name)
 
 
+def _resolve_motions_dir(repo_root: Path) -> Path | None:
+    """Locate the reference motion CSVs (mirrors generate_all.sh).
+
+    The CSVs live in the sibling ``softmimic`` repo, not under this repo, so
+    they are not always present. ``SOFTMIMIC_MOTIONS_DIR`` overrides the guess.
+    """
+    override = os.environ.get("SOFTMIMIC_MOTIONS_DIR")
+    candidates = [
+        Path(override) if override else None,
+        repo_root / "datasets" / "motions_csv",
+        repo_root.parent / "softmimic" / "datasets" / "motions_csv",
+    ]
+    for c in candidates:
+        if c is not None and (c / "stand.csv").is_file():
+            return c
+    return None
+
+
 @pytest.fixture(scope="module")
 def paths(generator_module):
     module_dir = Path(generator_module.__file__).resolve().parent
     repo_root = module_dir.parent
-    motion_path = repo_root / "datasets" / "motions_csv" / "stand.csv"
+    motions_dir = _resolve_motions_dir(repo_root)
+    if motions_dir is None:
+        pytest.skip(
+            "reference motion CSVs not found; set SOFTMIMIC_MOTIONS_DIR to the "
+            "softmimic datasets/motions_csv directory"
+        )
     model_path = (
         repo_root
         / "softmimic_deploy"
@@ -50,7 +73,7 @@ def paths(generator_module):
     release_root = module_dir / "release_examples"
     return {
         "module_dir": module_dir,
-        "motion_path": motion_path,
+        "motion_path": motions_dir / "stand.csv",
         "model_path": model_path,
         "release_root": release_root,
     }
