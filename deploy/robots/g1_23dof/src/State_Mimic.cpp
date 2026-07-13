@@ -131,6 +131,9 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
     if (cfg["end_state"]) {
         end_state = cfg["end_state"].as<std::string>();
     }
+    if (cfg["loop"]) {
+        loop_ = cfg["loop"].as<bool>();
+    }
     if (cfg["desired_stiffness"]) {
         desired_stiffness = cfg["desired_stiffness"].as<float>();
     }
@@ -152,12 +155,14 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
     }
 
     const auto & joy = FSMState::lowstate->joystick;
-    this->registered_checks.emplace_back(
-        std::make_pair(
-            [&]()->bool{ return (env->episode_length * env->step_dt) > time_range_[1]; }, // time out
-            FSMStringMap.right.at(end_state)
-        )
-    );
+    if (!loop_) {
+        this->registered_checks.emplace_back(
+            std::make_pair(
+                [&]()->bool{ return (env->episode_length * env->step_dt) > time_range_[1]; }, // time out
+                FSMStringMap.right.at(end_state)
+            )
+        );
+    }
     this->registered_checks.emplace_back(
         std::make_pair(
             [this, limit_angle]()->bool{ return isaaclab::mdp::bad_orientation(env.get(), limit_angle); }, // bad orientation
@@ -199,7 +204,16 @@ void State_Mimic::enter()
         while (policy_thread_running)
         {
             env->robot->update();
-            motion->update(env->episode_length * env->step_dt + time_range_[0]);
+            float motion_time = env->episode_length * env->step_dt + time_range_[0];
+            if (loop_) {
+                // Wrap within [time_range_[0], time_range_[1]] so the clip replays
+                // seamlessly instead of freezing on the last frame.
+                float span = time_range_[1] - time_range_[0];
+                if (span > 1e-6f) {
+                    motion_time = time_range_[0] + std::fmod(env->episode_length * env->step_dt, span);
+                }
+            }
+            motion->update(motion_time);
             env->step();
 
             // Sleep

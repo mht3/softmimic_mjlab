@@ -10,13 +10,14 @@ FSM:
     Static_Balance:
       id: 4
       type: RLBase
-
+    Mimic_Compliant_Stand:
+      id: 5
+      type: Mimic
     # Mimic_Dance1_subject2:
-    #   id: 5
-    #   type: Mimic
-
-    # Mimic_Swallow_Balance:
     #   id: 6
+    #   type: Mimic
+    # Mimic_Swallow_Balance:
+    #   id: 7
     #   type: Mimic
 
   Passive:
@@ -69,6 +70,8 @@ FSM:
     transitions:
       Passive: LT + B.on_pressed
       Static_Balance: RT + B.on_pressed
+      Mimic_Compliant_Stand: RB + A.on_pressed
+
       # Mimic_Dance1_subject2: RB + A.on_pressed
       # Mimic_Swallow_Balance: RB + B.on_pressed
     limit_angle: 1.0  # radians (~57 deg); triggers passive on fall
@@ -99,22 +102,24 @@ FSM:
   # SoftMimic compliant tracking policy. desired_stiffness [40, 1000] N/m and
   # desired_rotational_stiffness [0.1, 10] Nm/rad are observed by the policy;
   # adjust online with the d-pad (up/down: translational, left/right: rotational).
-  # Mimic_Compliant_Stand:
-  #   transitions:
-  #     Passive: LT + B.on_pressed
-  #     Velocity: RT + A.on_pressed
-  #   limit_angle: 1.0
-  #   motion_file: config/policy/compliant_mimic/stand/params/stand_nominal.npz
-  #   policy_dir: config/policy/compliant_mimic/stand
-  #   desired_stiffness: 200.0
-  #   desired_rotational_stiffness: 1.0
-  #   time_start: 0.0
-  #   time_end: 500.0
+  Mimic_Compliant_Stand:
+    transitions:
+      Passive: LT + B.on_pressed
+      Velocity: RT + A.on_pressed
+    limit_angle: 1.25
+    motion_file: config/policy/compliant_mimic/stand/params/stand.npz
+    policy_dir: config/policy/compliant_mimic/stand
+    desired_stiffness: 200.0
+    desired_rotational_stiffness: 1.0
+    time_start: 0.0
+    time_end: 500.0
+    loop: true  # replay the clip indefinitely instead of falling back to Velocity
 
   Static_Balance:
     transitions:
       Passive: LT + B.on_pressed
       Velocity: RT + A.on_pressed
+      Mimic_Compliant_Stand: RB + A.on_pressed
       # Mimic_Dance1_subject2: RB + A.on_pressed
       # Mimic_Swallow_Balance: RB + B.on_pressed# radians
     policy_dir: config/policy/static_balance/v1_baseline # v2_visitation_critic_l3_ball, or v3_visitation_critic_rew_bin

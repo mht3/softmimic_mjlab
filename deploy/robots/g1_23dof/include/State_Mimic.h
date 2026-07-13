@@ -29,6 +29,7 @@ private:
     std::thread policy_thread;
     bool policy_thread_running = false;
     std::array<float, 2> time_range_;
+    bool loop_ = false;
 };
 
 
