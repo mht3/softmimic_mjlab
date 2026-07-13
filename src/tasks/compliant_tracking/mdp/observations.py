@@ -70,30 +70,6 @@ def robot_body_ori_b(env: ManagerBasedRlEnv, command_name: str) -> torch.Tensor:
 
 
 ##
-# Velocity-conditioning observations (actor + critic). These expose the
-# reference root velocity in the reference heading frame so the policy learns
-# to associate a commanded velocity with the gait; the GUI joystick overrides
-# them at play time to steer the robot.
-##
-
-
-def reference_root_lin_vel_b(
-  env: ManagerBasedRlEnv, command_name: str
-) -> torch.Tensor:
-  """Reference root linear velocity (heading frame). xy is the steering command."""
-  command = cast(CompliantMotionCommand, env.command_manager.get_term(command_name))
-  return command.reference_root_lin_vel_b[:, :2]
-
-
-def reference_root_ang_vel_b(
-  env: ManagerBasedRlEnv, command_name: str
-) -> torch.Tensor:
-  """Reference root yaw rate (heading frame). The steering yaw command."""
-  command = cast(CompliantMotionCommand, env.command_manager.get_term(command_name))
-  return command.reference_root_ang_vel_b[:, 2:3]
-
-
-##
 # SoftMimic compliance observations (critic-only; the actor keeps the
 # deployable tracking observation layout).
 ##

@@ -32,18 +32,13 @@ import src.tasks.compliant_tracking.mdp as mdp
 from src.tasks.compliant_tracking.mdp import CompliantMotionCommandCfg
 
 def make_compliant_tracking_env_cfg(
-  history_length: int = 3, velocity_conditioning: bool = False
+  history_length: int = 3,
 ) -> ManagerBasedRlEnvCfg:
   """Create base compliant tracking task configuration.
 
   Args:
     history_length: Number of past frames stacked into every observation term
       (SoftMimic Table III uses 3).
-    velocity_conditioning: If True, add the reference root velocity (heading
-      frame) as an actor+critic observation. This lets the policy be steered
-      by a velocity command (GUI joystick at play time), mirroring SoftMimic's
-      ``reference_xy_vel`` / ``reference_yaw_vel`` conditioning. It changes the
-      observation dimension, so checkpoints are not compatible across the flag.
   """
 
   ##
@@ -188,22 +183,6 @@ def make_compliant_tracking_env_cfg(
       history_length=history_length,
     ),
   }
-
-  # Velocity conditioning: expose the reference root velocity (heading frame)
-  # to both actor and critic so the policy learns to follow a velocity command
-  # (steerable via the GUI joystick at play time).
-  if velocity_conditioning:
-    for terms in (actor_terms, critic_terms):
-      terms["reference_root_lin_vel_b"] = ObservationTermCfg(
-        func=mdp.reference_root_lin_vel_b,
-        params={"command_name": "motion"},
-        history_length=history_length,
-      )
-      terms["reference_root_ang_vel_b"] = ObservationTermCfg(
-        func=mdp.reference_root_ang_vel_b,
-        params={"command_name": "motion"},
-        history_length=history_length,
-      )
 
   observations = {
     "actor": ObservationGroupCfg(

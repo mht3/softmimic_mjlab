@@ -137,11 +137,6 @@ export SOFTMIMIC_MOTIONS_DIR=/path/to/softmimic/datasets/motions_csv   # optiona
 cd compliant_motion_augmentation && bash generate_all.sh && cd ..
 ```
 
-> **Note:** a missing reference CSV now raises an error. Earlier revisions silently fell
-> back to a static stand pose, which produced a "walk" dataset that never moved (every
-> file was identical to `stand`). `tests/test_compliant_motion_datasets.py` guards against
-> this — a walk clip must translate the root, a stand clip must not.
-
 Then convert each task to 23dof and to training NPZs (shown for `stand` and `walk`):
 
 ```bash
@@ -164,17 +159,6 @@ done
 bash train_configs/compliance/stand.sh    # or walk.sh
 ```
 
-To train a **steerable** walking policy, use the velocity-conditioned task
-(`Unitree-G1-23Dof-Compliant-Tracking-Velocity`). It adds the reference root velocity
-(heading frame) to the observations so the policy follows a velocity command; at play
-time the GUI velocity joystick (Section 3.3) overrides it to steer the robot in x/y and
-yaw. Train it against the walk dataset:
-
-```bash
-python scripts/train.py Unitree-G1-23Dof-Compliant-Tracking-Velocity \
-  --motion_file=src/assets/compliant_motions/walk --env.scene.num-envs 4096
-```
-
 #### 3.3 Visualize a trained policy
 
 ```bash
@@ -182,30 +166,6 @@ python scripts/play.py Unitree-G1-23Dof-Compliant-Tracking-No-State-Estimation \
   --motion_file=src/assets/compliant_motions/stand \
   --checkpoint_file=logs/rsl_rl/g1_23dof_compliant_tracking/2026-xx-xx_xx-xx-xx/model_xx.pt
 ```
-
-The viser viewer's **Motion** panel plays the reference: the time slider tracks the
-current playback position (drag it to scrub), "Use augmented motions" switches to a random
-augmented adapted-reference on the spot, and "Apply dataset forces" replays the augmented
-motion's baked-in forcefield wrench each step — exactly what the policy saw during training
-(it auto-enables augmented motions, since only those carry force events). Only the
-forcefield/collision-emulator motions contain force events, so on the `stand` zero-wrench
-motion nothing is applied — switch to augmented and enable dataset forces to see them.
-While augmented motions are playing, the interactive **Push** panel is disabled (the
-augmented reference / dataset forces are the perturbation source); uncheck "Use augmented
-motions" to drive pushes manually again.
-
-It also exposes a **Desired Stiffness** panel (log-scale sliders over the SoftMimic training
-ranges) and a **Velocity Joystick** panel. The joystick only steers a policy trained on the
-velocity-conditioned task — check "Enable" and drag the vel x / vel y / yaw rate sliders to
-command a body-frame velocity (they override the reference velocity the policy observes):
-
-```bash
-python scripts/play.py Unitree-G1-23Dof-Compliant-Tracking-Velocity \
-  --motion_file=src/assets/compliant_motions/walk \
-  --checkpoint_file=logs/rsl_rl/g1_23dof_compliant_tracking/2026-xx-xx_xx-xx-xx/model_xx.pt
-```
-
-Headless episode statistics / video (`scripts/test.py`) and perturbation sweeps (`scripts/evaluate.py`) take the same task, `--motion_file`, and checkpoint arguments.
 
 For real deployment, copy the run's `exported/policy.onnx` + `params/deploy.yaml` and a nominal motion NPZ (e.g. `src/assets/compliant_motions/stand/zero-wrench/stand_augmented_mink_001.npz`) into `deploy/robots/g1_23dof/config/policy/compliant_mimic/stand`, then deploy as in Section 5. The commanded stiffness is set per-policy in `deploy/robots/g1_23dof/config/config.yaml` (`desired_stiffness`, `desired_rotational_stiffness`) and can be adjusted online with the d-pad (up/down: translational, left/right: rotational).
 

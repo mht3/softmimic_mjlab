@@ -23,7 +23,6 @@ from mjlab.tasks.tracking.mdp.commands import MotionCommand, MotionCommandCfg
 from mjlab.utils.lab_api.math import (
   axis_angle_from_quat,
   quat_apply,
-  quat_apply_inverse,
   quat_from_euler_xyz,
   quat_inv,
   quat_mul,
@@ -299,14 +298,6 @@ class CompliantMotionCommand(MotionCommand):
     # turns it off by default for interactive play (GUI toggle re-enables it).
     self._dataset_forces_enabled: bool = True
 
-    # Velocity conditioning: the actor observes the reference root velocity in
-    # the reference heading frame (see `reference_root_lin_vel_b` /
-    # `reference_root_ang_vel_b` observations). While the GUI joystick is
-    # enabled these observed values are replaced by the slider command so the
-    # policy can be steered — mirroring the SoftMimic deploy joystick that
-    # overrides `reference_xy_vel` / `reference_yaw_vel`.
-    self._gui_velocity_command: torch.Tensor | None = None
-
     self._update_compliance_buffers()
 
   # -- Compliance properties (current frame) --
@@ -338,36 +329,6 @@ class CompliantMotionCommand(MotionCommand):
   def desired_foot_contacts(self) -> torch.Tensor:
     """Reference foot contact probabilities [left, right] at the current frame."""
     return self.motion.foot_contacts[self.time_steps]
-
-  @property
-  def reference_root_lin_vel_b(self) -> torch.Tensor:
-    """Reference root linear velocity in the reference heading (yaw) frame.
-
-    This is the velocity-conditioning command channel. During play the GUI
-    joystick overrides the xy components; z is always taken from the dataset.
-    """
-    lin_vel_b = quat_apply_inverse(
-      yaw_quat(self.anchor_quat_w), self.anchor_lin_vel_w
-    )
-    if self._gui_velocity_command is not None:
-      lin_vel_b = lin_vel_b.clone()
-      lin_vel_b[:, 0] = self._gui_velocity_command[0]
-      lin_vel_b[:, 1] = self._gui_velocity_command[1]
-    return lin_vel_b
-
-  @property
-  def reference_root_ang_vel_b(self) -> torch.Tensor:
-    """Reference root angular velocity in the reference heading (yaw) frame.
-
-    Only the yaw rate is meaningful for steering; the GUI joystick overrides it.
-    """
-    ang_vel_b = quat_apply_inverse(
-      yaw_quat(self.anchor_quat_w), self.anchor_ang_vel_w
-    )
-    if self._gui_velocity_command is not None:
-      ang_vel_b = ang_vel_b.clone()
-      ang_vel_b[:, 2] = self._gui_velocity_command[2]
-    return ang_vel_b
 
   @property
   def desired_stiffness(self) -> torch.Tensor:
@@ -846,52 +807,6 @@ class CompliantMotionCommand(MotionCommand):
     # Snap to the main reference motion at t=0 on startup.
     self._gui_time_s = 0.0
     self._gui_pending_reset = True
-
-    # -- Velocity joystick --
-    # While "Enable" is checked, the sliders replace the reference root velocity
-    # the policy observes (see `reference_root_lin_vel_b` /
-    # `reference_root_ang_vel_b`), steering a velocity-conditioned policy. Ranges
-    # match the SoftMimic velocity command limits (Table V).
-    from viser import Icon
-
-    vel_axes = [
-      ("vel x (m/s)", 1.0),
-      ("vel y (m/s)", 0.5),
-      ("yaw rate (rad/s)", 1.0),
-    ]
-    vel_sliders: list = []
-    with server.gui.add_folder("Velocity Joystick"):
-      vel_enabled = server.gui.add_checkbox(
-        "Enable",
-        initial_value=False,
-        hint="Override the reference root velocity with these sliders. Only "
-        "works for a velocity-conditioned policy.",
-      )
-      for label, max_val in vel_axes:
-        vs = server.gui.add_slider(
-          label, min=-max_val, max=max_val, step=0.05, initial_value=0.0
-        )
-        vel_sliders.append(vs)
-      vel_zero_btn = server.gui.add_button("Zero", icon=Icon.SQUARE_X)
-
-    @vel_zero_btn.on_click
-    def _(_) -> None:
-      for vs in vel_sliders:
-        vs.value = 0.0
-
-    def _apply_velocity() -> None:
-      if vel_enabled.value:
-        self._gui_velocity_command = torch.tensor(
-          [vel_sliders[0].value, vel_sliders[1].value, vel_sliders[2].value],
-          device=self.device,
-        )
-      else:
-        self._gui_velocity_command = None
-
-    vel_enabled.on_update(lambda _: _apply_velocity())
-    for vs in vel_sliders:
-      vs.on_update(lambda _: _apply_velocity())
-    _apply_velocity()
 
     # -- Desired stiffness --
     lin_lo, lin_hi = 40.0, 1000.0

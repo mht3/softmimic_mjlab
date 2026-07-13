@@ -16,7 +16,7 @@ TASK="${TASK:-Unitree-G1-23Dof-Compliant-Tracking-No-State-Estimation}"
 NUM_ENVS=4096
 
 # --- Agent ---
-MAX_ITERATIONS=50001
+MAX_ITERATIONS=100001
 LEARNING_RATE=1e-3
 NUM_STEPS_PER_ENV=24
 

@@ -21,12 +21,9 @@ def unitree_g1_23dof_flat_compliant_tracking_env_cfg(
   has_state_estimation: bool = True,
   play: bool = False,
   history_length: int = 3,
-  velocity_conditioning: bool = False,
 ) -> ManagerBasedRlEnvCfg:
   """Create Unitree G1_23Dof flat terrain compliant tracking configuration."""
-  cfg = make_compliant_tracking_env_cfg(
-    history_length=history_length, velocity_conditioning=velocity_conditioning
-  )
+  cfg = make_compliant_tracking_env_cfg(history_length=history_length)
 
   cfg.scene.entities = {"robot": get_g1_23dof_robot_cfg()}
 
