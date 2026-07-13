@@ -4,7 +4,7 @@ import os
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import torch
 import tyro
@@ -18,6 +18,36 @@ from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
 from mjlab.viewer import NativeMujocoViewer, ViserPlayViewer
 from mjlab.rl.runner import MjlabOnPolicyRunner
+from mjlab.rl.exporter_utils import attach_metadata_to_onnx, get_base_metadata
+from mjlab.tasks.tracking.mdp import MotionCommand
+
+
+def _export_policy_onnx(runner, env, resume_path: Path, log_dir: Path) -> None:
+  """Export the loaded checkpoint's policy to ONNX in ``log_dir``.
+
+  Mirrors ``CompliantMotionTrackingOnPolicyRunner.save()``'s export half:
+  writes the plain ``policy.onnx`` graph and attaches base + motion metadata.
+  The file is named after the checkpoint (e.g. ``policy_80000.onnx``) so it
+  does not overwrite any ``policy.onnx`` produced during training.
+  """
+  filename = f"{resume_path.stem.replace('model', 'policy')}.onnx"
+  runner.export_policy_to_onnx(str(log_dir), filename)
+  onnx_path = os.path.join(str(log_dir), filename)
+
+  metadata = get_base_metadata(env.unwrapped, "local")
+  # Add motion-tracking metadata when the env has a motion command.
+  if "motion" in env.unwrapped.command_manager.active_terms:
+    motion_term = cast(
+      MotionCommand, env.unwrapped.command_manager.get_term("motion")
+    )
+    metadata.update(
+      {
+        "anchor_body_name": motion_term.cfg.anchor_body_name,
+        "body_names": list(motion_term.cfg.body_names),
+      }
+    )
+  attach_metadata_to_onnx(onnx_path, metadata)
+  print(f"[INFO]: Exported policy to ONNX: {onnx_path}")
 
 
 @dataclass(frozen=True)
@@ -35,6 +65,10 @@ class PlayConfig:
   viewer: Literal["auto", "native", "viser"] = "auto"
   no_terminations: bool = False
   """Disable all termination conditions (useful for viewing motions with dummy agents)."""
+  export: bool = False
+  """Also export the loaded checkpoint's policy to ONNX in the log folder before
+  running the simulation. Runs the same export as the training runner's save(),
+  naming the file after the checkpoint (e.g. ``policy_80000.onnx``)."""
 
   # Internal flag used by demo script.
   _demo_mode: tyro.conf.Suppress[bool] = False
@@ -159,6 +193,10 @@ def run_play(task_id: str, cfg: PlayConfig):
       str(resume_path), load_cfg={"actor": True}, strict=True, map_location=device
     )
     policy = runner.get_inference_policy(device=device)
+
+    if cfg.export:
+      assert resume_path is not None and log_dir is not None
+      _export_policy_onnx(runner, env, resume_path, log_dir)
 
   # Handle "auto" viewer selection.
   if cfg.viewer == "auto":
