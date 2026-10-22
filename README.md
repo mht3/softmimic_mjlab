@@ -1,6 +1,6 @@
-# Compliant Humanoid · Unitree G1 23DOF
+# Compliant Humanoid ror Unitree G1 23DOF
 
-A SoftMimic port to mjlab with compliant standing, an ARDY motion editor, and a browser physics demo.
+A reimplementation of SoftMimic in mjlab and a browser physics demo.
 
 ## Run the included policy demo
 
