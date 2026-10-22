@@ -18,8 +18,17 @@ MiniConda is a lightweight distribution of Conda, suitable for creating and mana
 
 ```bash
 mkdir -p ~/miniconda3
+```
+
+```bash
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
+```
+
+```bash
 bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
+```
+
+```bash
 rm ~/miniconda3/miniconda.sh
 ```
 
@@ -27,6 +36,9 @@ After installation, initialize Conda:
 
 ```bash
 ~/miniconda3/bin/conda init --all
+```
+
+```bash
 source ~/.bashrc
 ```
 
@@ -62,6 +74,9 @@ Navigate to the project root directory and run the setup script:
 
 ```bash
 cd softmimic_mjlab
+```
+
+```bash
 bash setup.sh
 ```
 

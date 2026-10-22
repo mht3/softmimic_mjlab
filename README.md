@@ -2,19 +2,53 @@
 
 A reimplementation of SoftMimic in mjlab and a browser physics demo.
 
-## Run the included policy demo
+## Installation and environment
+
+Use the `unitree_rl_mjlab` conda environment with Python 3.11, following the original [installation guide](doc/setup_en.md). The repository pins mjlab 1.2.0 and MuJoCo 3.8.1. Skip environment creation if it already exists.
+
+```bash
+conda create -n unitree_rl_mjlab python=3.11
+```
+
+```bash
+conda activate unitree_rl_mjlab
+```
 
 ```bash
 git clone https://github.com/mht3/softmimic_mjlab.git
-cd softmimic_mjlab
-python3 -m pip install numpy pyyaml onnx
-python3 demos/sonic_web/prepare.py --reference datasets/streamer/stand.csv \
-  --deploy demos/policies/stand_9000/params/deploy.yaml \
-  --policy demos/policies/stand_9000/exported/policy.onnx
-python3 demos/sonic_web/serve.py --port 8088
 ```
 
-Open **[Compliant Humanoid](http://127.0.0.1:8088)** in a modern desktop browser. No training environment or CUDA is required: the command rebuilds viewer assets from the included ONNX, source meshes and standing CSV. Enable **Trained ONNX policy**, then press **Play**. Drag the robot to apply forces; reset or scrub the fixed reference below. The cyan ghost shows the nominal pose.
+```bash
+cd softmimic_mjlab
+```
+
+```bash
+bash setup.sh
+```
+
+```bash
+python -m pip install onnx
+```
+
+Run the commands below from the repository root. In each new terminal, activate the environment first:
+
+```bash
+conda activate unitree_rl_mjlab
+```
+
+## Run the included policy demo
+
+```bash
+python demos/sonic_web/prepare.py --reference datasets/streamer/stand.csv \
+  --deploy demos/policies/stand_9000/params/deploy.yaml \
+  --policy demos/policies/stand_9000/exported/policy.onnx
+```
+
+```bash
+python demos/sonic_web/serve.py --port 8088
+```
+
+Open **[Compliant Humanoid](http://127.0.0.1:8088)** in a modern desktop browser. The preparation command rebuilds viewer assets from the included ONNX, source meshes and standing CSV. Enable **Trained ONNX policy**, then press **Play**. Drag the robot to apply forces; reset or scrub the fixed reference below. The cyan ghost shows the nominal pose.
 
 The included model is the **iteration-9000 intermediate checkpoint**, not the final 20k policy. Its PyTorch/ONNX and browser/C++ interface checks pass; these do not certify balance, compliance performance or hardware safety. See the [model record](demos/policies/stand_9000/README.md).
 
@@ -38,6 +72,9 @@ Only the small `datasets/streamer/stand.csv` input is versioned. Generated IK CS
 3. Train a fresh 20,000-iteration policy; online W&B project: **g1_compliance**:
    ```bash
    python scripts/check_compliant_dataset_ready.py src/assets/compliant_motions/g1_23dof/streamer_stand
+   ```
+
+   ```bash
    bash train_configs/compliance/streamer_stand.sh
    ```
 4. Follow [export and simulation](WORKFLOW.md#4-package-and-visualize-the-trained-policy) to package the matching ONNX, deployment YAML and reference, then install them into the browser demo. Moving reference files require a motion-specific tracker; the current training/deployment path supports constant standing.
@@ -48,7 +85,11 @@ Only the small `datasets/streamer/stand.csv` input is versioned. Generated IK CS
 
 [Full reproducible workflow](WORKFLOW.md) · [Motion editor controls](demos/ardy_web/README.md) · [Policy player](demos/sonic_web/README.md)
 
-For a remote workstation: `ssh -N -L 8088:127.0.0.1:8088 -L 8089:127.0.0.1:8089 USER@WORKSTATION`.
+For a remote workstation, run this on your local machine:
+
+```bash
+ssh -N -L 8088:127.0.0.1:8088 -L 8089:127.0.0.1:8089 USER@WORKSTATION
+```
 
 ## Credits
 

@@ -10,6 +10,9 @@ Follow [installation](doc/setup_en.md), then activate the training environment:
 
 ```bash
 conda activate unitree_rl_mjlab
+```
+
+```bash
 cd softmimic_mjlab
 ```
 
@@ -77,13 +80,24 @@ Set `RUN` to the completed run directory. Bundle names must be new; the packager
 
 ```bash
 RUN=/absolute/path/to/completed/training/run
+```
+
+```bash
 BUNDLE="$PWD/deploy/robots/g1_23dof/config/policy/streamer_stand"
+```
+
+```bash
 python demos/package_standing_policy.py --run "$RUN" --output "$BUNDLE" \
   --reference datasets/reference23/streamer_stand.csv \
   --dataset src/assets/compliant_motions/g1_23dof/streamer_stand
+```
 
+```bash
 CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 \
   python demos/check_cpp_policy_contract.py --bundle "$BUNDLE"
+```
+
+```bash
 CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 \
   python demos/sonic_web/test_policy_contract.py --deploy "$BUNDLE/params/deploy.yaml"
 ```
@@ -96,6 +110,9 @@ python demos/sonic_web/prepare.py \
   --deploy "$BUNDLE/params/deploy.yaml" \
   --policy "$BUNDLE/exported/policy.onnx" \
   --stiffness 200 --rotational-stiffness 1
+```
+
+```bash
 python demos/sonic_web/serve.py --port 8088
 ```
 
@@ -125,6 +142,9 @@ Build the **23DOF C++ controller** using the dependencies in [deployment setup](
 
 ```bash
 cmake -S deploy/robots/g1_23dof -B deploy/robots/g1_23dof/build
+```
+
+```bash
 cmake --build deploy/robots/g1_23dof/build -j2
 ```
 
@@ -133,7 +153,13 @@ After successful simulation evaluation, back up the active configuration and ins
 ```bash
 cp deploy/robots/g1_23dof/config/config.yaml \
    "deploy/robots/g1_23dof/config/config.yaml.backup.$(date +%Y%m%d_%H%M%S)"
+```
+
+```bash
 cp "$BUNDLE/controller_config.yaml" deploy/robots/g1_23dof/config/config.yaml
+```
+
+```bash
 ./deploy/robots/g1_23dof/build/g1_ctrl --network=YOUR_ROBOT_NETWORK_INTERFACE
 ```
 

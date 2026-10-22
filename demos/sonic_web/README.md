@@ -4,14 +4,20 @@ The maintained browser player uses the published [GEAR-SONIC Three.js/MuJoCo-WAS
 
 ## Run the included snapshot
 
-From the repository root, using Python 3 (no training environment or CUDA required):
+From the repository root, after the [conda setup](../../README.md#installation-and-environment):
 
 ```bash
-python3 -m pip install numpy pyyaml onnx
-python3 demos/sonic_web/prepare.py --reference datasets/streamer/stand.csv \
+conda activate unitree_rl_mjlab
+```
+
+```bash
+python demos/sonic_web/prepare.py --reference datasets/streamer/stand.csv \
   --deploy demos/policies/stand_9000/params/deploy.yaml \
   --policy demos/policies/stand_9000/exported/policy.onnx
-python3 demos/sonic_web/serve.py --port 8088
+```
+
+```bash
+python demos/sonic_web/serve.py --port 8088
 ```
 
 Open http://127.0.0.1:8088. The included policy is the [iteration-9000 intermediate snapshot](../policies/stand_9000/README.md), with its matching deployment YAML and bundled browser runtimes. Generated assets are ignored; the command above rebuilds them from the small standing CSV and source meshes. For another controller, use the training environment and follow the [bundle and validation commands](../../WORKFLOW.md#4-package-and-visualize-the-trained-policy), then supply all three matched files:
@@ -39,7 +45,13 @@ Explicit PD torques in this browser are not bitwise equivalent to mjlab's implic
 
 ```bash
 node demos/sonic_web/test_drag.mjs
+```
+
+```bash
 node demos/ardy_web/test_csv_export.mjs
+```
+
+```bash
 CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=2 \
   python demos/sonic_web/test_policy_contract.py --deploy "$BUNDLE/params/deploy.yaml"
 ```

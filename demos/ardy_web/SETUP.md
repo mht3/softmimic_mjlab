@@ -19,10 +19,19 @@ From the repository root, with an existing Hugging Face account authorized to do
 
 ```bash
 conda activate unitree_rl_mjlab
+```
+
+```bash
 bash demos/ardy_web/setup.sh
+```
+
+```bash
 python demos/sonic_web/prepare.py --reference datasets/streamer/stand.csv \
   --deploy demos/policies/stand_9000/params/deploy.yaml \
   --policy demos/policies/stand_9000/exported/policy.onnx
+```
+
+```bash
 bash demos/ardy_web/run.sh
 ```
 
