@@ -1,4 +1,4 @@
-# Compliant Humanoid for Unitree G1 23DOF
+# Compliant Humanoid Motion for Unitree G1 23DOF
 
 A reimplementation of SoftMimic in mjlab and a browser physics demo.
 
