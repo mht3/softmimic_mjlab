@@ -11,6 +11,8 @@ from mjlab.rl.exporter_utils import (
 )
 from mjlab.rl.runner import MjlabOnPolicyRunner
 from mjlab.tasks.tracking.mdp import MotionCommand
+from ..mdp.commands import resolve_motion_files
+from .health_metrics import ModeHealthMetrics
 
 
 class CompliantMotionTrackingOnPolicyRunner(MjlabOnPolicyRunner):
@@ -34,6 +36,28 @@ class CompliantMotionTrackingOnPolicyRunner(MjlabOnPolicyRunner):
   ):
     super().__init__(env, train_cfg, log_dir, device)
     self.registry_name = registry_name
+    if log_dir is not None:
+      command = self.env.unwrapped.command_manager.get_term("motion")
+      files = resolve_motion_files(command.cfg.motion_file)
+      modes = [files[i].parent.name for i in command.motion_ids.cpu().tolist()]
+      health = ModeHealthMetrics(modes, device)
+      original_step = self.logger.process_env_step
+      original_log = self.logger.log
+
+      def process_with_health(rewards, dones, extras, intrinsic_rewards=None):
+        original_step(rewards, dones, extras, intrinsic_rewards)
+        health.update(rewards, dones, extras["time_outs"], command.metrics["error_body_pos"])
+
+      def log_with_health(*args, **kwargs):
+        original_log(*args, **kwargs)
+        values = health.flush()
+        if self.logger.writer is not None:
+          iteration = kwargs["it"] if "it" in kwargs else args[0]
+          for name, value in values.items():
+            self.logger.writer.add_scalar(name, value, iteration)
+
+      self.logger.process_env_step = process_with_health
+      self.logger.log = log_with_health
 
   def save(self, path: str, infos=None):
     super().save(path, infos)

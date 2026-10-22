@@ -175,6 +175,71 @@ G1_ACTUATOR_ANKLE = BuiltinPositionActuatorCfg(
 )
 
 ##
+# SoftMimic actuator config.
+#
+# PD gains of the working 29-DoF SoftMimic stand policy, identical in sim and
+# on the real robot (softmimic assets/robots/unitree.py == deploy
+# g1_config.py). Actuators are split by motor type x gain value because
+# BuiltinPositionActuatorCfg takes scalar gains. Effort limits and armatures
+# match the retained joints in SoftMimic's assets/robots/unitree.py.
+##
+
+G1_SOFTMIMIC_ACTUATOR_ARM = BuiltinPositionActuatorCfg(
+  target_names_expr=(
+    ".*_shoulder_pitch_joint",
+    ".*_shoulder_roll_joint",
+    ".*_shoulder_yaw_joint",
+    ".*_elbow_joint",
+  ),
+  stiffness=40.0,
+  damping=5.0,
+  effort_limit=ACTUATOR_5020.effort_limit,
+  armature=0.01,
+)
+G1_SOFTMIMIC_ACTUATOR_WRIST = BuiltinPositionActuatorCfg(
+  target_names_expr=(".*_wrist_roll_joint",),
+  stiffness=5.0,
+  damping=1.0,
+  effort_limit=ACTUATOR_5020.effort_limit,
+  armature=0.001,
+)
+G1_SOFTMIMIC_ACTUATOR_HIP_PITCH_WAIST = BuiltinPositionActuatorCfg(
+  target_names_expr=(".*_hip_pitch_joint", "waist_yaw_joint"),
+  stiffness=200.0,
+  damping=5.0,
+  effort_limit=ACTUATOR_7520_14.effort_limit,
+  armature=0.01,
+)
+G1_SOFTMIMIC_ACTUATOR_HIP_YAW = BuiltinPositionActuatorCfg(
+  target_names_expr=(".*_hip_yaw_joint",),
+  stiffness=150.0,
+  damping=5.0,
+  effort_limit=ACTUATOR_7520_14.effort_limit,
+  armature=0.01,
+)
+G1_SOFTMIMIC_ACTUATOR_HIP_ROLL = BuiltinPositionActuatorCfg(
+  target_names_expr=(".*_hip_roll_joint",),
+  stiffness=150.0,
+  damping=5.0,
+  effort_limit=88.0,
+  armature=0.01,
+)
+G1_SOFTMIMIC_ACTUATOR_KNEE = BuiltinPositionActuatorCfg(
+  target_names_expr=(".*_knee_joint",),
+  stiffness=200.0,
+  damping=5.0,
+  effort_limit=ACTUATOR_7520_22.effort_limit,
+  armature=0.01,
+)
+G1_SOFTMIMIC_ACTUATOR_ANKLE = BuiltinPositionActuatorCfg(
+  target_names_expr=(".*_ankle_pitch_joint", ".*_ankle_roll_joint"),
+  stiffness=20.0,
+  damping=2.0,
+  effort_limit=ACTUATOR_5020.effort_limit * 2,
+  armature=0.01,
+)
+
+##
 # Keyframe config.
 ##
 
@@ -188,6 +253,23 @@ HOME_KEYFRAME = EntityCfg.InitialStateCfg(
     ".*_elbow_joint": 0.87,
     "left_shoulder_roll_joint": 0.18,
     "right_shoulder_roll_joint": -0.18,
+  },
+  joint_vel={".*": 0.0},
+)
+
+# Action offsets and relative joint observations depend on this pose, even
+# when resets initialize from a dataset reference rather than the keyframe.
+SOFTMIMIC_HOME_KEYFRAME = EntityCfg.InitialStateCfg(
+  pos=(0.0, 0.0, 0.74),
+  joint_pos={
+    ".*_hip_pitch_joint": -0.20,
+    ".*_knee_joint": 0.42,
+    ".*_ankle_pitch_joint": -0.23,
+    ".*_elbow_joint": 0.87,
+    "left_shoulder_roll_joint": 0.16,
+    "left_shoulder_pitch_joint": 0.35,
+    "right_shoulder_roll_joint": -0.16,
+    "right_shoulder_pitch_joint": 0.35,
   },
   joint_vel={".*": 0.0},
 )
@@ -255,6 +337,19 @@ G1_23DOF_ARTICULATION = EntityArticulationInfoCfg(
   soft_joint_pos_limit_factor=0.9,
 )
 
+G1_23DOF_SOFTMIMIC_ARTICULATION = EntityArticulationInfoCfg(
+  actuators=(
+    G1_SOFTMIMIC_ACTUATOR_ARM,
+    G1_SOFTMIMIC_ACTUATOR_WRIST,
+    G1_SOFTMIMIC_ACTUATOR_HIP_PITCH_WAIST,
+    G1_SOFTMIMIC_ACTUATOR_HIP_YAW,
+    G1_SOFTMIMIC_ACTUATOR_HIP_ROLL,
+    G1_SOFTMIMIC_ACTUATOR_KNEE,
+    G1_SOFTMIMIC_ACTUATOR_ANKLE,
+  ),
+  soft_joint_pos_limit_factor=0.9,
+)
+
 
 G1_23DOF_JOINT_IDS_MAP: list[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 16, 17, 18, 19, 22, 23, 24, 25, 26]
 
@@ -274,21 +369,56 @@ G1_23DOF_HARDWARE_DAMPING: list[float] = [
   0.9, 0.9, 0.9, 0.9, 0.9,
 ]
 
+# SoftMimic gains in action-space order; identical to the sim gains above so
+# the trained policy runs against the exact same PD loop on hardware.
+G1_23DOF_SOFTMIMIC_STIFFNESS: list[float] = [
+  200.0, 150.0, 150.0, 200.0, 20.0, 20.0,
+  200.0, 150.0, 150.0, 200.0, 20.0, 20.0,
+  200.0,
+  40.0, 40.0, 40.0, 40.0, 5.0,
+  40.0, 40.0, 40.0, 40.0, 5.0,
+]
+G1_23DOF_SOFTMIMIC_DAMPING: list[float] = [
+  5.0, 5.0, 5.0, 5.0, 2.0, 2.0,
+  5.0, 5.0, 5.0, 5.0, 2.0, 2.0,
+  5.0,
+  5.0, 5.0, 5.0, 5.0, 1.0,
+  5.0, 5.0, 5.0, 5.0, 1.0,
+]
 
-def get_g1_23dof_robot_cfg() -> EntityCfg:
+
+def get_g1_23dof_robot_cfg(gains: str = "natural_freq") -> EntityCfg:
   """Get a fresh G1_23DOF robot configuration instance.
 
   Returns a new EntityCfg instance each time to avoid mutation issues when
   the config is shared across multiple places.
+
+  Args:
+    gains: "natural_freq" for the armature-derived gains, "softmimic" for the
+      proven SoftMimic hardware gains (sim == deploy).
   """
+  if gains == "softmimic":
+    articulation = G1_23DOF_SOFTMIMIC_ARTICULATION
+    hardware_stiffness = G1_23DOF_SOFTMIMIC_STIFFNESS
+    hardware_damping = G1_23DOF_SOFTMIMIC_DAMPING
+    init_state = SOFTMIMIC_HOME_KEYFRAME
+    collisions = (FULL_COLLISION_WITHOUT_SELF,)
+  elif gains == "natural_freq":
+    articulation = G1_23DOF_ARTICULATION
+    hardware_stiffness = G1_23DOF_HARDWARE_STIFFNESS
+    hardware_damping = G1_23DOF_HARDWARE_DAMPING
+    init_state = HOME_KEYFRAME
+    collisions = (FULL_COLLISION,)
+  else:
+    raise ValueError(f"Unknown gains preset: {gains!r}")
   return DeployEntityCfg(
-    init_state=HOME_KEYFRAME,
-    collisions=(FULL_COLLISION,),
+    init_state=init_state,
+    collisions=collisions,
     spec_fn=get_spec,
-    articulation=G1_23DOF_ARTICULATION,
+    articulation=articulation,
     joint_ids_map=G1_23DOF_JOINT_IDS_MAP,
-    hardware_stiffness=G1_23DOF_HARDWARE_STIFFNESS,
-    hardware_damping=G1_23DOF_HARDWARE_DAMPING,
+    hardware_stiffness=hardware_stiffness,
+    hardware_damping=hardware_damping,
   )
 
 

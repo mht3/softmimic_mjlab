@@ -8,6 +8,10 @@ from mjlab.sensor import ContactSensor
 from mjlab.utils.lab_api.math import quat_apply_inverse, quat_error_magnitude
 
 from .commands import CompliantMotionCommand, MotionCommand
+from .observations import (
+  contact_force_magnitudes, foot_contact, reference_frame_index,
+  aligned_reference_body_targets, force_link_reference_targets, desired_wrench_next,
+)
 
 if TYPE_CHECKING:
   from mjlab.envs import ManagerBasedRlEnv
@@ -49,9 +53,10 @@ def motion_relative_body_position_error_exp(
 ) -> torch.Tensor:
   command = cast(MotionCommand, env.command_manager.get_term(command_name))
   body_indexes = _get_body_indexes(command, body_names)
+  target, _ = aligned_reference_body_targets(env, command, step=1)
   error = torch.sum(
     torch.square(
-      command.body_pos_relative_w[:, body_indexes]
+      target[:, body_indexes]
       - command.robot_body_pos_w[:, body_indexes]
     ),
     dim=-1,
@@ -67,9 +72,10 @@ def motion_relative_body_orientation_error_exp(
 ) -> torch.Tensor:
   command = cast(MotionCommand, env.command_manager.get_term(command_name))
   body_indexes = _get_body_indexes(command, body_names)
+  _, target = aligned_reference_body_targets(env, command, step=1)
   error = (
     quat_error_magnitude(
-      command.body_quat_relative_w[:, body_indexes],
+      target[:, body_indexes],
       command.robot_body_quat_w[:, body_indexes],
     )
     ** 2
@@ -145,7 +151,7 @@ def force_command_tracking(
 ) -> torch.Tensor:
   """Reward matching the applied forcefield force to the dataset target."""
   command = cast(CompliantMotionCommand, env.command_manager.get_term(command_name))
-  error = torch.norm(command.target_forces_w - command.forcefield_forces_w, dim=-1)
+  error = torch.norm(desired_wrench_next(command) - command.forcefield_forces_w, dim=-1)
   return torch.exp(-(error**2) / sigma**2)
 
 
@@ -154,7 +160,7 @@ def torque_command_tracking(
 ) -> torch.Tensor:
   """Reward matching the applied forcefield torque to the dataset target."""
   command = cast(CompliantMotionCommand, env.command_manager.get_term(command_name))
-  error = torch.norm(command.target_torques_w - command.forcefield_torques_w, dim=-1)
+  error = torch.norm(desired_wrench_next(command, rotational=True) - command.forcefield_torques_w, dim=-1)
   return torch.exp(-(error**2) / sigma**2)
 
 
@@ -163,16 +169,16 @@ def force_link_position_tracking_exp(
 ) -> torch.Tensor:
   """Reward tracking the adapted position of the force-target body.
 
-  Uses the same anchored relative frame as the body tracking rewards. Returns
-  1 for environments without an active force event.
+  Uses the fixed force-onset transform, unlike ordinary imitation which is
+  aligned to the current pelvis. Returns1 without an active force event.
   """
   command = cast(CompliantMotionCommand, env.command_manager.get_term(command_name))
-  body_idx = command.force_body_indexes.clamp(min=0)
+  body_idx, target_pos, _ = force_link_reference_targets(env, command, step=1)
   env_ids = torch.arange(env.num_envs, device=env.device)
-  robot_pos = command.robot.data.body_link_pos_w[env_ids, body_idx]
-  error = torch.norm(command.force_body_pos_relative_w - robot_pos, dim=-1)
+  robot_pos = command.robot.data.body_link_pos_w[env_ids, body_idx.clamp(min=0)]
+  error = torch.norm(target_pos - robot_pos, dim=-1)
   reward = torch.exp(-(error**2) / sigma**2)
-  reward[~command.active_force_mask] = 1.0
+  reward[~command.active_force_mask | (body_idx < 0)] = 1.0
   return reward
 
 
@@ -181,12 +187,12 @@ def force_link_orientation_tracking_exp(
 ) -> torch.Tensor:
   """Reward tracking the adapted orientation of the force-target body."""
   command = cast(CompliantMotionCommand, env.command_manager.get_term(command_name))
-  body_idx = command.force_body_indexes.clamp(min=0)
+  body_idx, _, target_quat = force_link_reference_targets(env, command, step=1)
   env_ids = torch.arange(env.num_envs, device=env.device)
-  robot_quat = command.robot.data.body_link_quat_w[env_ids, body_idx]
-  error = quat_error_magnitude(command.force_body_quat_relative_w, robot_quat)
+  robot_quat = command.robot.data.body_link_quat_w[env_ids, body_idx.clamp(min=0)]
+  error = quat_error_magnitude(target_quat, robot_quat)
   reward = torch.exp(-(error**2) / sigma**2)
-  reward[~command.active_force_mask] = 1.0
+  reward[~command.active_force_mask | (body_idx < 0)] = 1.0
   return reward
 
 
@@ -205,7 +211,8 @@ def motion_base_gravity_error_exp(
   """
   command = cast(MotionCommand, env.command_manager.get_term(command_name))
   gravity = torch.tensor([0.0, 0.0, -1.0], device=env.device).expand(env.num_envs, 3)
-  ref_gravity_b = quat_apply_inverse(command.body_quat_w[:, 0], gravity)
+  idx = reference_frame_index(command, 1)
+  ref_gravity_b = quat_apply_inverse(command.motion.body_quat_w[idx, 0], gravity)
   robot_gravity_b = quat_apply_inverse(command.robot_body_quat_w[:, 0], gravity)
   dot = torch.sum(ref_gravity_b * robot_gravity_b, dim=-1).clamp(-1.0, 1.0)
   return torch.exp(-torch.sin(torch.acos(dot).abs()))
@@ -221,8 +228,9 @@ def motion_base_lin_vel_local_error_exp(
   frame, making the term yaw-drift invariant. Body 0 is the pelvis.
   """
   command = cast(MotionCommand, env.command_manager.get_term(command_name))
+  idx = reference_frame_index(command, 1)
   ref_vel_b = quat_apply_inverse(
-    command.body_quat_w[:, 0], command.body_lin_vel_w[:, 0]
+    command.motion.body_quat_w[idx, 0], command.motion.body_lin_vel_w[idx, 0]
   )
   robot_vel_b = quat_apply_inverse(
     command.robot_body_quat_w[:, 0], command.robot_body_lin_vel_w[:, 0]
@@ -236,8 +244,9 @@ def motion_base_ang_vel_local_error_exp(
 ) -> torch.Tensor:
   """Reward base angular velocity tracking in each body's own frame."""
   command = cast(MotionCommand, env.command_manager.get_term(command_name))
+  idx = reference_frame_index(command, 1)
   ref_vel_b = quat_apply_inverse(
-    command.body_quat_w[:, 0], command.body_ang_vel_w[:, 0]
+    command.motion.body_quat_w[idx, 0], command.motion.body_ang_vel_w[idx, 0]
   )
   robot_vel_b = quat_apply_inverse(
     command.robot_body_quat_w[:, 0], command.robot_body_ang_vel_w[:, 0]
@@ -256,9 +265,7 @@ def feet_slide_proportional(
   SoftMimic's stance-foot stability term: sum over feet of the planar foot
   velocity magnitude weighted by the contact force magnitude.
   """
-  sensor: ContactSensor = env.scene[sensor_name]
-  assert sensor.data.force is not None
-  contact_force = torch.norm(sensor.data.force, dim=-1)  # [B, num_feet]
+  contact_force = contact_force_magnitudes(env, sensor_name)
   command = cast(CompliantMotionCommand, env.command_manager.get_term(command_name))
   foot_vel_xy = command.robot.data.body_link_lin_vel_w[
     :, command.foot_body_indexes, :2
@@ -278,8 +285,14 @@ def foot_contact_schedule_mismatch(
   probability from the motion data, summed over both feet.
   """
   command = cast(CompliantMotionCommand, env.command_manager.get_term(command_name))
-  sensor: ContactSensor = env.scene[sensor_name]
-  assert sensor.data.found is not None
-  contacts = (sensor.data.found.view(env.num_envs, -1) > 0).float()  # [B, num_feet]
-  desired = command.desired_foot_contacts  # [B, num_feet]
+  contacts = foot_contact(env, sensor_name)
+  desired = command.motion.foot_contacts[reference_frame_index(command, 1)]
   return torch.sum(torch.square(contacts - desired), dim=1)
+
+
+def joint_deviation_from_command_exp(env, command_name, sigma=1.):
+  """Released SoftMimic all-joint imitation kernel (norm, not squared norm)."""
+  command = env.command_manager.get_term(command_name)
+  target = command.motion.joint_pos[reference_frame_index(command, 1)]
+  difference = command.robot.data.joint_pos - target
+  return torch.exp(-difference.norm(dim=-1) / sigma**2)

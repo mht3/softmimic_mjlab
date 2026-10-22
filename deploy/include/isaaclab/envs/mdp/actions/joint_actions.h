@@ -34,6 +34,7 @@ public:
         if(!cfg["clip"].IsNull()) {
             _clip = cfg["clip"].as<std::vector<std::vector<float> >>();
         }
+        process_actions(_raw_actions);
     }
 
     virtual void process_actions(std::vector<float> actions)
@@ -77,7 +78,8 @@ public:
 
     void reset()
     {
-        _raw_actions.assign(_action_dim, 0.0f);
+        // Also reset motor targets before the first asynchronous inference.
+        process_actions(std::vector<float>(_action_dim, 0.0f));
     }
 
 protected:

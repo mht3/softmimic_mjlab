@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SONIC Demo – Motion Tracking</title>
+  <!-- COI service worker: enables SharedArrayBuffer (required by MuJoCo WASM) on GitHub Pages -->
+  <script src="coi-serviceworker.js"></script>
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- ONNX Runtime Web (local copy, avoids COEP/CDN issues) -->
+  <script src="lib/ort.min.js"></script>
+
+  <!-- Three.js import map -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="demo-root">
+    <!-- WebGL canvas -->
+    <canvas id="canvas"></canvas>
+
+    <!-- Side panel (left) -->
+    <div class="side-panel">
+      <!-- Project header -->
+      <div class="glass project-header">
+        <div class="logo"><span>SONIC</span> Demo</div>
+        <div class="tagline">Whole-Body Motion Tracking · G1 Humanoid</div>
+        <div class="project-links">
+          <a href="./static/pdf/sonic_paper.pdf" target="_blank" rel="noopener" class="project-link">Paper PDF</a>
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="glass panel-section" style="padding: 0.7rem 1.1rem;">
+        <div class="status-row">
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <div class="status-dot loading" id="status-dot"></div>
+            <span id="status-text">Initializing…</span>
+          </div>
+          <span id="status-fps" style="font-size:0.72rem;color:var(--text-muted)"></span>
+        </div>
+      </div>
+
+      <!-- Motion selector -->
+      <div class="glass panel-section">
+        <div class="panel-title">Reference Motion</div>
+        <div class="motion-list" id="motion-list">
+          <div class="motion-item" style="color:var(--text-muted);cursor:default;font-style:italic">
+            Loading…
+          </div>
+        </div>
+      </div>
+
+      <!-- Generate Motion -->
+      <div class="glass panel-section">
+        <div class="panel-title">Generate Motion with Kimodo</div>
+        <a href="https://github.com/nv-tlabs/kimodo" target="_blank" rel="noopener" style="font-size:0.7rem;color:var(--text-muted);text-decoration:none;margin-bottom:0.3rem;display:block;">github.com/nv-tlabs/kimodo</a>
+        <div class="generate-panel">
+          <input type="text" id="prompt-input" class="prompt-input"
+                 placeholder="Describe a motion…" autocomplete="off" />
+          <div class="generate-row">
+            <label class="ctrl-label" for="duration-input">Duration</label>
+            <input type="number" id="duration-input" class="duration-input"
+                   min="2" max="10" step="0.5" value="5" />
+            <span class="ctrl-label">sec</span>
+          </div>
+          <button id="btn-generate" class="btn-generate" disabled>Generate</button>
+          <div id="generate-status" class="generate-status">Backend offline</div>
+        </div>
+      </div>
+
+      <!-- Simulation controls -->
+      <div class="glass panel-section">
+        <div class="panel-title">Simulation</div>
+        <div class="controls">
+          <!-- Physics toggle -->
+          <div class="ctrl-row">
+            <span class="ctrl-label">Physics</span>
+            <div class="ctrl-btns">
+              <button class="icon-btn text-btn" id="btn-physics" title="Toggle physics simulation (P)">OFF</button>
+              <button class="icon-btn" id="btn-restart" title="Restart (R)">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                  <polyline points="1,4 1,10 7,10"/>
+                  <path d="M3.51 15a9 9 0 1 0 .49-4.45"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Policy toggle -->
+          <div class="ctrl-row">
+            <span class="ctrl-label">Policy</span>
+            <button class="icon-btn text-btn policy-loading" id="btn-policy" title="Toggle SONIC policy (O)">
+              Loading policy…
+            </button>
+          </div>
+
+          <!-- Camera follow -->
+          <div class="ctrl-row">
+            <span class="ctrl-label">Camera follow</span>
+            <button class="icon-btn text-btn active" id="btn-follow" title="Camera follows robot (F)">ON</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Info panel (top right) -->
+    <div class="glass info-panel" id="info-panel">
+      <div class="info-row">
+        <span class="info-key">Motion</span>
+        <span class="info-val" id="info-motion">—</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Physics</span>
+        <span class="info-val" id="info-physics-mode">OFF</span>
+      </div>
+      <div class="info-row">
+        <span class="info-key">Policy</span>
+        <span class="info-val" id="info-policy-mode" style="color:rgba(240,165,0,0.8)">OFF</span>
+      </div>
+    </div>
+
+    <!-- Help bar (bottom center) -->
+    <div class="glass help-bar">
+      <div class="help-item"><kbd class="kbd">P</kbd> Physics</div>
+      <div class="help-item"><kbd class="kbd">R</kbd> Restart</div>
+      <div class="help-item"><kbd class="kbd">O</kbd> Policy</div>
+      <div class="help-item"><kbd class="kbd">F</kbd> Follow</div>
+      <div class="help-item">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:0.6">
+          <circle cx="12" cy="12" r="10"/>
+          <path d="M12 8v4l3 3"/>
+        </svg>
+        Drag to orbit
+      </div>
+      <div class="help-item">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:0.6">
+          <path d="M18 11V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v0M14 10V4a2 2 0 0 0-2-2 2 2 0 0 0-2 2v2M10 10.5V6a2 2 0 0 0-2-2 2 2 0 0 0-2 2v8l4 4h8"/>
+        </svg>
+        Drag robot to push
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+    <!-- Back to landing -->
+    <a href="index.html" class="back-link">← SONIC</a>
+  </div>
+
+  <!-- Loading overlay -->
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div class="loading-logo"><span>SONIC</span> Demo</div>
+    <div id="loading-status">Loading MuJoCo WASM…</div>
+  </div>
+
+  <!-- Main demo script (ES module) -->
+  <script type="module" src="js/demo.js?v=2"></script>
+</body>
+</html>

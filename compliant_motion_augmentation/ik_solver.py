@@ -55,6 +55,7 @@ class G1_Mink_IK_Solver:
         self.num_dofs = len(self.actuated_qpos_indices)
 
         self.posture_task = mink.PostureTask(self.model, cost=1e-4)
+        self.release_posture_task = mink.PostureTask(self.model, cost=.1)
         com_cost_vector = np.array([com_cost, com_cost, com_cost * com_cost_z_factor])
         self.com_task = mink.ComTask(cost=com_cost_vector)
         self.com_task.set_cost(com_cost_vector)
@@ -149,9 +150,19 @@ class G1_Mink_IK_Solver:
             for i in range(self.model.njnt)
             if self.model.jnt_type[i] != mujoco.mjtJoint.mjJNT_FREE
         ]
-        velocity_limits = {name: np.pi * 2 for name in joint_names}
+        velocity_limits = {name: constants.MAX_IK_JOINT_VEL for name in joint_names}
         self.velocity_limit = mink.VelocityLimit(self.model, velocity_limits)
-        self.limits = [mink.ConfigurationLimit(self.model), self.velocity_limit]
+        self.release_velocity_limit = mink.VelocityLimit(
+            self.model, {name: constants.MAX_RELEASE_JOINT_VEL for name in joint_names})
+        collision_geoms = [i for i in range(self.model.ngeom)
+                           if self.model.geom_bodyid[i] > 0
+                           and (self.model.geom_contype[i] or self.model.geom_conaffinity[i])]
+        self.collision_limit = mink.CollisionAvoidanceLimit(
+            self.model, geom_pairs=[(collision_geoms, collision_geoms)],
+            gain=.5, minimum_distance_from_collisions=.005,
+            collision_detection_distance=.05,
+        )
+        self.limits = [mink.ConfigurationLimit(self.model), self.velocity_limit, self.collision_limit]
         self.repeat_frame_time = repeat_frame_time
         self.static_qpos_ref: Optional[np.ndarray] = None
         self.static_foot_contacts_ref: Optional[np.ndarray] = None

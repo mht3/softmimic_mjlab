@@ -12,11 +12,13 @@ register_mjlab_task(
   runner_cls=CompliantMotionTrackingOnPolicyRunner,
 )
 
+# Deployable stand task: SoftMimic minimal actor (proprioception + stiffness
+# command, no reference observations).
 register_mjlab_task(
-  task_id="Unitree-G1-23Dof-Compliant-Tracking-No-State-Estimation",
-  env_cfg=unitree_g1_23dof_flat_compliant_tracking_env_cfg(has_state_estimation=False),
+  task_id="Unitree-G1-23Dof-Compliant-Tracking-Stand",
+  env_cfg=unitree_g1_23dof_flat_compliant_tracking_env_cfg(stand_deployable=True),
   play_env_cfg=unitree_g1_23dof_flat_compliant_tracking_env_cfg(
-    has_state_estimation=False, play=True
+    stand_deployable=True, play=True
   ),
   rl_cfg=unitree_g1_23dof_compliant_tracking_ppo_runner_cfg(),
   runner_cls=CompliantMotionTrackingOnPolicyRunner,

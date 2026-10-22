@@ -2,6 +2,7 @@
 
 #include "FSM/State_RLBase.h"
 #include <cnpy.h>
+#include <atomic>
 
 
 class State_Mimic : public FSMState
@@ -27,7 +28,8 @@ private:
     std::shared_ptr<MotionLoader_> motion_; // for saving
 
     std::thread policy_thread;
-    bool policy_thread_running = false;
+    std::atomic<bool> policy_thread_running{false};
+    std::atomic<bool> policy_fault{false};
     std::array<float, 2> time_range_;
     bool loop_ = false;
 };

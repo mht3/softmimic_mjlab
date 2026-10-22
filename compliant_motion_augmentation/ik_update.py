@@ -8,9 +8,89 @@ from scipy.spatial.transform import Rotation, Slerp
 import mink
 
 from .config import SimulationConfig
-from .constants import KEYPOINT_BODY_NAMES, MAX_RELEASE_ANGULAR_VEL, MAX_RELEASE_LINEAR_VEL
+from .constants import (
+    KEYPOINT_BODY_NAMES,
+    MAX_RELEASE_ANGULAR_VEL,
+    MAX_RELEASE_JOINT_VEL,
+    MAX_IK_JOINT_VEL,
+    MAX_RELEASE_LINEAR_VEL,
+)
 from .ik_solver import G1_Mink_IK_Solver
 from .physics import calculate_cop_aware_com_target
+from .collision_checks import self_collision_pairs, collision_free_step
+
+
+def decay_residual_towards_reference(
+    ik_solver: G1_Mink_IK_Solver, qpos_ref: np.ndarray, dt: float
+) -> None:
+    """Shrink the configuration's offset from the reference at bounded velocity.
+
+    Replaces the previous hard reset ``configuration.update(q=qpos_ref)``: the
+    Cartesian release only drives the forced link's pose back, so joint-space
+    displacement in the null space (e.g. a shoulder yaw wound up ~2.7 rad while
+    the hand barely moved) survives the release, and the hard reset teleported
+    it into the recorded data as single-frame jumps of >80 rad/s. The reference
+    itself is followed exactly — only the residual offset decays — so a moving
+    reference is tracked without lag and, once the residual is gone, the
+    configuration equals ``qpos_ref`` exactly as before.
+    """
+    q = ik_solver.configuration.q.copy()
+    q_new = qpos_ref.copy()
+
+    res_pos = q[0:3] - qpos_ref[0:3]
+    dist = float(np.linalg.norm(res_pos))
+    max_step_pos = MAX_RELEASE_LINEAR_VEL * dt
+    if dist > max_step_pos:
+        q_new[0:3] += res_pos * ((dist - max_step_pos) / dist)
+
+    # qpos quaternions are wxyz; scipy uses xyzw.
+    rot_ref = Rotation.from_quat(qpos_ref[[4, 5, 6, 3]])
+    rot_cur = Rotation.from_quat(q[[4, 5, 6, 3]])
+    rel = rot_ref.inv() * rot_cur
+    angle = float(rel.magnitude())
+    max_step_ang = MAX_RELEASE_ANGULAR_VEL * dt
+    if angle > max_step_ang:
+        rel_remaining = Rotation.from_rotvec(
+            rel.as_rotvec() * ((angle - max_step_ang) / angle)
+        )
+        q_new[3:7] = (rot_ref * rel_remaining).as_quat()[[3, 0, 1, 2]]
+
+    idx = ik_solver.actuated_qpos_indices
+    res_joints = q[idx] - qpos_ref[idx]
+    max_step_joint = MAX_RELEASE_JOINT_VEL * dt
+    q_new[idx] = qpos_ref[idx] + np.sign(res_joints) * np.maximum(
+        np.abs(res_joints) - max_step_joint, 0.0
+    )
+
+    ik_solver.configuration.update(q=q_new)
+    mujoco.mj_forward(ik_solver.model, ik_solver.data)
+    if self_collision_pairs(ik_solver.model, ik_solver.data):
+        # A straight joint-space return can cut through the torso. Keep the
+        # current pose and let collision-constrained IK find the next step.
+        ik_solver.configuration.update(q=q)
+        mujoco.mj_forward(ik_solver.model, ik_solver.data)
+
+
+def bound_frame_joint_step(ik_solver, previous_q, dt):
+    """Bound the combined decay/IK step without detaching the root from its legs.
+
+    Clipping hinge coordinates independently after IK breaks the coordinated
+    floating-base motion that kept the feet planted. Scale the complete tangent
+    displacement by the most restrictive joint instead, including root position
+    and orientation, then integrate on MuJoCo's configuration manifold.
+    """
+    q = ik_solver.configuration.q.copy()
+    model = ik_solver.model
+    velocity = np.empty(model.nv)
+    mujoco.mj_differentiatePos(model, velocity, dt, previous_q, q)
+    joint_mask = np.isin(model.jnt_qposadr, ik_solver.actuated_qpos_indices)
+    joint_dofs = model.jnt_dofadr[joint_mask]
+    peak = float(np.max(np.abs(velocity[joint_dofs]), initial=0.))
+    if peak > MAX_IK_JOINT_VEL:
+        q = previous_q.copy()
+        mujoco.mj_integratePos(model, q, velocity * (MAX_IK_JOINT_VEL / peak), dt)
+    ik_solver.configuration.update(q=q)
+    mujoco.mj_forward(ik_solver.model, ik_solver.data)
 
 
 def perform_mink_ik_step(
@@ -24,6 +104,7 @@ def perform_mink_ik_step(
     rotational_stiffness: float,
     dt: float,
     ik_target_overrides: Optional[Dict[str, Tuple[np.ndarray, Rotation]]] = None,
+    recovering: bool = False,
 ) -> Tuple[np.ndarray, Rotation, np.ndarray]:
     """Run a single constrained IK solve."""
     ref_config = mink.Configuration(ik_solver.model)
@@ -33,6 +114,9 @@ def perform_mink_ik_step(
     active_tasks = []
     ik_solver.posture_task.set_target(qpos_ref)
     active_tasks.append(ik_solver.posture_task)
+    if recovering:
+        ik_solver.release_posture_task.set_target(qpos_ref)
+        active_tasks.append(ik_solver.release_posture_task)
     if ik_solver.waist_task:
         ik_solver.waist_task.set_target(qpos_ref)
         active_tasks.append(ik_solver.waist_task)
@@ -73,7 +157,7 @@ def perform_mink_ik_step(
             quat_xyzw = rot.as_quat()
             quat_wxyz = np.array([quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]])
             target_pose = mink.SE3(np.concatenate([quat_wxyz, pos]))
-            release_task = ik_solver.force_tasks[name]
+            release_task = ik_solver.keypoint_tasks[name] if recovering else ik_solver.force_tasks[name]
             release_task.set_target(target_pose)
             active_tasks.append(release_task)
         elif not (is_force_active and name == current_task_body_name):
@@ -103,7 +187,7 @@ def perform_mink_ik_step(
         active_tasks,
         dt,
         solver="daqp",
-        limits=ik_solver.limits,
+        limits=ik_solver.limits + ([ik_solver.release_velocity_limit] if recovering else []),
         damping=1e-5,
     )
     ik_solver.configuration.integrate_inplace(vel, dt)
@@ -121,6 +205,7 @@ def perform_single_ik_update(
     config: SimulationConfig,
     qpos_ref: np.ndarray,
 ) -> Tuple:
+    frame_start_q = ik_solver.configuration.q.copy()
     force_ext, torque_ext = np.zeros(3), np.zeros(3)
     com_force_for_ik = np.zeros(3)
     task_body_name = (
@@ -278,9 +363,8 @@ def perform_single_ik_update(
 
         com_force_for_ik = force_ext
 
-    elif not release_info or release_info.get("finished", False):
-        ik_solver.configuration.update(q=qpos_ref)
-        mujoco.mj_forward(ik_solver.model, ik_solver.data)
+    # Return through the constrained IK problem. Direct joint-space decay
+    # before IK can fight its collision constraints and stall at the torso.
 
     task_target_pos, task_target_rot, _ = perform_mink_ik_step(
         ik_solver,
@@ -293,7 +377,20 @@ def perform_single_ik_update(
         rot_stiffness,
         dt,
         ik_target_overrides,
+        recovering=event is None,
     )
+
+    # Residual decay and IK both move the joints in an unforced frame. Mink
+    # limits only its own increment; coherently bound the complete frame.
+    bound_frame_joint_step(ik_solver, frame_start_q, dt)
+    if not hasattr(ik_solver, 'collision_step_data'):
+        ik_solver.collision_step_data = mujoco.MjData(ik_solver.model)
+    q_safe, fraction = collision_free_step(
+        ik_solver.model, ik_solver.collision_step_data, frame_start_q,
+        ik_solver.configuration.q.copy())
+    ik_solver.configuration.update(q=q_safe)
+    mujoco.mj_forward(ik_solver.model, ik_solver.data)
+    ik_solver.last_collision_step_fraction = fraction
 
     ref_data.qpos[:] = qpos_ref
     mujoco.mj_forward(ref_data.model, ref_data)

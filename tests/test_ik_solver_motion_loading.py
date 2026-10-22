@@ -19,23 +19,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 
-@pytest.fixture(scope="module", autouse=True)
-def ensure_softmimic_symlink():
-  # Mirror test_mink_generator: the augmentation package imports
-  # ``softmimic_deploy.src...`` which is only importable via this symlink.
-  symlink_dir = REPO_ROOT / "softmimic_deploy" / "softmimic_deploy"
-  target_dir = REPO_ROOT / "softmimic_deploy"
-  created = False
-  if not symlink_dir.exists():
-    symlink_dir.symlink_to(target_dir, target_is_directory=True)
-    created = True
-  try:
-    yield
-  finally:
-    if created and symlink_dir.is_symlink():
-      symlink_dir.unlink()
-
-
 @pytest.fixture(scope="module")
 def ik_solver_cls():
   mink = pytest.importorskip("mink", reason="augmentation pipeline needs mink")

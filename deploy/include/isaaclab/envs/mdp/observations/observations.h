@@ -4,11 +4,39 @@
 #pragma once
 
 #include "isaaclab/envs/manager_based_rl_env.h"
+#include "isaaclab/envs/mdp/observations/constant_reference.h"
 
 namespace isaaclab
 {
 namespace mdp
 {
+
+// Standing references are exported from the full nominal training dataset.
+// They intentionally do not use State_Mimic's adapted motion playback arrays.
+REGISTER_OBSERVATION(reference_dof_pos)
+{
+    return constant_nominal_reference(params, "reference_dof_pos", env->robot->data.joint_ids_map.size());
+}
+REGISTER_OBSERVATION(reference_xy_vel)
+{
+    return constant_nominal_reference(params, "reference_xy_vel", 2);
+}
+REGISTER_OBSERVATION(reference_yaw_vel)
+{
+    return constant_nominal_reference(params, "reference_yaw_vel", 1);
+}
+REGISTER_OBSERVATION(reference_root_height)
+{
+    return constant_nominal_reference(params, "reference_root_height", 1);
+}
+REGISTER_OBSERVATION(reference_gravity_vector)
+{
+    return constant_nominal_reference(params, "reference_gravity_vector", 3);
+}
+REGISTER_OBSERVATION(reference_foot_contact)
+{
+    return constant_nominal_reference(params, "reference_foot_contact", 2);
+}
 
 REGISTER_OBSERVATION(base_ang_vel)
 {

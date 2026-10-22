@@ -8,6 +8,7 @@ from mjlab.utils.lab_api.math import quat_apply_inverse
 
 from .commands import MotionCommand
 from .rewards import _get_body_indexes
+from .observations import aligned_reference_body_targets
 
 if TYPE_CHECKING:
   from mjlab.entity import Entity
@@ -62,8 +63,9 @@ def bad_motion_body_pos(
   command = cast(MotionCommand, env.command_manager.get_term(command_name))
 
   body_indexes = _get_body_indexes(command, body_names)
+  target, _ = aligned_reference_body_targets(env, command, step=0)
   error = torch.norm(
-    command.body_pos_relative_w[:, body_indexes]
+    target[:, body_indexes]
     - command.robot_body_pos_w[:, body_indexes],
     dim=-1,
   )

@@ -5,7 +5,7 @@ checkpoint (or zero actions) headlessly, tracks per-episode returns/lengths,
 and optionally records a video.
 
 Usage:
-  python scripts/test.py Unitree-G1-23Dof-Compliant-Tracking-No-State-Estimation \
+  python scripts/test.py Unitree-G1-23Dof-Compliant-Tracking-Stand \
     --motion_file=src/assets/compliant_motions/g1_23dof/stand \
     --checkpoint_file=logs/rsl_rl/g1_23dof_compliant_tracking/<run>/model_30000.pt \
     --num_envs 64 --duration 30

@@ -197,15 +197,18 @@ def main(
 
   n = motion.output_frames
 
-  # Inert compliance channels: zero wrench, no forcefield. Force maps to the
-  # root body (index 0); at zero stiffness it is never applied. force_body_pos/
-  # quat therefore just track the root's FK pose. ff_setpoint_rot is identity
-  # (wxyz), ff_normal a unit +z so no NaNs downstream even though inactive.
-  log["force_body_index"] = np.zeros(n, dtype=np.int64)
+  # Inert compliance channels: zero wrench, no forcefield. Follow the augmented
+  # pipeline's no-event convention (runner._record_step): force_body_index -1,
+  # robot stiffness 140 N/m / 1 Nm/rad. The stiffness must not be zero — the
+  # desired_stiffness_log observation is log(stiffness), and log(~0) would be
+  # far outside the training distribution (log 10..log 1000) if this NPZ is
+  # ever replayed through the sim pipeline. ff_setpoint_rot is identity (wxyz),
+  # ff_normal a unit +z so no NaNs downstream even though inactive.
+  log["force_body_index"] = np.full(n, -1, dtype=np.int64)
   log["force_vector"] = np.zeros((n, 3), dtype=np.float32)
   log["torque_vector"] = np.zeros((n, 3), dtype=np.float32)
-  log["stiffness"] = np.zeros(n, dtype=np.float32)
-  log["rotational_stiffness"] = np.zeros(n, dtype=np.float32)
+  log["stiffness"] = np.full(n, 140.0, dtype=np.float32)
+  log["rotational_stiffness"] = np.full(n, 1.0, dtype=np.float32)
   log["ff_stiffness"] = np.zeros(n, dtype=np.float32)
   log["ff_rotational_stiffness"] = np.zeros(n, dtype=np.float32)
   log["ff_origin"] = np.zeros((n, 3), dtype=np.float32)
@@ -218,6 +221,10 @@ def main(
   log["force_body_pos_w"] = log["body_pos_w"][:, 0].copy()
   log["force_body_quat_w"] = log["body_quat_w"][:, 0].copy()
   log["foot_contacts"] = data[:, FOOT_CONTACT_COLS][frame_idx].astype(np.float32)
+  # This clip is unadapted, so all nominal channels equal its tracking targets.
+  for key in ("joint_pos", "joint_vel", "body_pos_w", "body_quat_w",
+              "body_lin_vel_w", "body_ang_vel_w", "foot_contacts"):
+    log["nominal_" + key] = log[key].copy()
 
   out_path = Path(output_file)
   out_path.parent.mkdir(parents=True, exist_ok=True)

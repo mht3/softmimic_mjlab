@@ -10,7 +10,7 @@
 
 set -e
 
-TASK="${TASK:-Unitree-G1-23Dof-Compliant-Tracking-No-State-Estimation}"
+TASK="${TASK:-Unitree-G1-23Dof-Compliant-Tracking}"
 
 # --- Environment ---
 NUM_ENVS=4096

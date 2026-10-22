@@ -1,0 +1,15 @@
+{
+  "source_run": "logs/rsl_rl/g1_23dof_compliant_tracking/2026-10-22_08-06-12_collision_recovery_stand_20k_fresh_20261022",
+  "reference_sha256": "152ca5ed762e27dcb74bf3257fc970f7108724c0467f12b536548f96d85c0a83",
+  "dataset": "src/assets/compliant_motions/g1_23dof/stand",
+  "source_onnx_sha256": "93f058f5dcc8a25b7e85f2620b82366425c089465de329bc5aacd3c90d69cf15",
+  "bundle_onnx_sha256": "93f058f5dcc8a25b7e85f2620b82366425c089465de329bc5aacd3c90d69cf15",
+  "observation_dim": 327,
+  "action_dim": 23,
+  "stiffness": 200,
+  "rotational_stiffness": 1,
+  "behavior_validated": false,
+  "hardware_started": false,
+  "checkpoint_iteration": 9000,
+  "checkpoint_sha256": "16d842deb58ac9df94d6b586a6a7c3221959490e1136cc96648e1371efa19d7a"
+}

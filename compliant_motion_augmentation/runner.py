@@ -23,6 +23,7 @@ from .force_profile import generate_random_force_profile
 from .ik_solver import G1_Mink_IK_Solver
 from .ik_update import perform_single_ik_update
 from .physics import is_ik_solution_feasible
+from .collision_checks import self_collision_pairs
 from .visualization import add_visual_overlays
 
 try:
@@ -51,9 +52,11 @@ class SimulationRunner:
         self.event_queue: List[Dict[str, Any]] = []
         self.current_event: Optional[Dict[str, Any]] = None
         self.release_info: Optional[Dict[str, Any]] = None
+        self.releasing_event: Optional[Dict[str, Any]] = None
         self.reusable_ref_data: Optional[mujoco.MjData] = None
         self.prev_qpos_ref: Optional[np.ndarray] = None
         self.event_start_data_idx = -1
+        self.event_start_step = -1
         self.qpos_before_event: Optional[np.ndarray] = None
         self.rewind_indicator_until = 0.0
         self.viewer = None
@@ -131,6 +134,13 @@ class SimulationRunner:
             f"[File {self.file_index + 1}/{self.config.num_files}] "
             f"Generated profile with {len(self.force_profile)} candidate events."
         )
+        if not self.force_profile and self.config.force_mode != "zero-wrench":
+            print(
+                f"WARNING: force mode '{self.config.force_mode}' produced 0 events for "
+                f"'{os.path.basename(str(self.config.motion_path))}'. Collision events are "
+                "velocity-gated, so a static reference rejects every candidate — the "
+                "output file will contain no force interaction at all."
+            )
         self.event_queue = list(self.force_profile)
 
     def _prepare_timing(self):
@@ -222,6 +232,32 @@ class SimulationRunner:
                     step = self._handle_infeasible_event(current_time)
                     continue
 
+            # Release and nominal frames previously bypassed ALL feasibility
+            # checks. Never write a self-intersecting pose, even with zero load.
+            collisions = self_collision_pairs(self.ik_solver.model, self.ik_solver.data)
+            if collisions:
+                raise RuntimeError(f"Self-collision seed={self.config.seed} file={self.file_index+1} at t={current_time:.3f}s; refusing to record invalid data: {collisions}")
+            if self.releasing_event is not None:
+                hands = [self.ik_solver.model.body(name).id for name in FORCEABLE_LINKS]
+                self.reusable_ref_data.qpos[:] = qpos_ref
+                mujoco.mj_forward(self.ik_solver.model, self.reusable_ref_data)
+                hand_error = np.linalg.norm(
+                    self.ik_solver.data.xpos[hands] - self.reusable_ref_data.xpos[hands], axis=1).max()
+                angles = [Rotation.from_matrix(
+                    self.ik_solver.data.xmat[h].reshape(3,3).T @
+                    self.reusable_ref_data.xmat[h].reshape(3,3)).magnitude() for h in hands]
+                if hand_error <= .02 and max(angles) <= .1:
+                    self.releasing_event = None
+                    self.release_info = None
+                elif current_time - self.releasing_event['end_time'] >= 1.9:
+                    # Feasibility includes returning from the event. Keep its
+                    # checkpoint until recovery succeeds, and resample the
+                    # entire event if it traps the arm against the body.
+                    print(f'[seed {self.config.seed}] Rejecting unrecoverable event at t={current_time:.3f}s, hand error={hand_error:.4f}m', flush=True)
+                    self.current_event = self.releasing_event
+                    self.releasing_event = None
+                    step = self._handle_infeasible_event(current_time)
+                    continue
             self._finalize_release_if_needed()
 
             if not self.is_interactive:
@@ -265,6 +301,12 @@ class SimulationRunner:
         if not self.current_event or current_time < self.current_event["end_time"]:
             return
 
+        # Probe the event's terminal wrench without advancing the IK state: the
+        # main loop performs this step's real IK update right after, so leaving
+        # this extra integration in place stepped the configuration twice per
+        # frame and put a velocity spike at every event boundary. The release
+        # must start from the last recorded pose, so restore it below.
+        q_snapshot = self.ik_solver.configuration.q.copy()
         (
             _task_body_name,
             last_force_ext,
@@ -283,6 +325,8 @@ class SimulationRunner:
             self.config,
             qpos_ref,
         )
+        self.ik_solver.configuration.update(q=q_snapshot)
+        mujoco.mj_forward(self.ik_solver.model, self.ik_solver.data)
         link_name = self.current_event["link_name"]
         self.release_info = {
             "link_name": link_name,
@@ -293,17 +337,24 @@ class SimulationRunner:
             ),
             "start_force": last_force_ext.copy(),
         }
+        self.releasing_event = self.current_event
         self.current_event = None
-        self.event_start_data_idx = -1
-        self.qpos_before_event = None
 
     def _maybe_start_next_event(self, current_time: float):
-        if self.current_event or not self.event_queue:
+        if self.current_event or self.releasing_event is not None or not self.event_queue:
             return
         if current_time < self.event_queue[0]["start_time"]:
             return
 
         self.current_event = self.event_queue.pop(0)
+        # A recovery can outlast the sampled rest gap. Preserve the next
+        # event's duration and ramps rather than jumping into its middle.
+        delay = max(0., current_time - self.current_event['start_time'])
+        if delay > self.timestep + 1e-8:
+            for key, value in list(self.current_event.items()):
+                if key.endswith('_time') and isinstance(value, (int, float)):
+                    self.current_event[key] = value + delay
+        self.event_start_step = round(current_time / self.timestep)
         if self.is_interactive:
             self.qpos_before_event = self.ik_solver.configuration.q.copy()
         else:
@@ -346,26 +397,38 @@ class SimulationRunner:
         else:
             self.current_event = None
 
-        rewind_to_time = event_to_rewind["start_time"]
+        # An event scheduled between frames first runs at ceil(start/dt).
+        # Rewinding to floor(start/dt) duplicates the preceding CSV frame on
+        # every rejection and shifts the rest of a walking reference in time.
+        rewind_to_step = self.event_start_step
+        rewind_to_time = rewind_to_step * self.timestep
         self.release_info = None
+        self.releasing_event = None
 
         if self.is_interactive:
             self.rewind_indicator_until = current_time + 1.0
             if self.qpos_before_event is not None:
                 self.ik_solver.configuration.update(q=self.qpos_before_event)
-            self.qpos_before_event = None
         else:
             self.all_adapted_qpos = self.all_adapted_qpos[: self.event_start_data_idx]
             self.all_reference_qpos = self.all_reference_qpos[: self.event_start_data_idx]
             self.all_force_data = self.all_force_data[: self.event_start_data_idx]
             self.all_collision_metadata = self.all_collision_metadata[: self.event_start_data_idx]
             if self.all_adapted_qpos:
-                last_valid_qpos = self.all_adapted_qpos[-1]
+                # Recorded rows are in CSV layout (pos, quat xyzw, joints);
+                # rebuild the raw MuJoCo qpos (quat wxyz, joints at their qpos
+                # addresses) before handing it back to the IK configuration.
+                row = self.all_adapted_qpos[-1]
+                last_valid_qpos = np.zeros(self.ik_solver.model.nq)
+                last_valid_qpos[0:3] = row[0:3]
+                last_valid_qpos[3:7] = row[[6, 3, 4, 5]]
+                last_valid_qpos[self.ik_solver.actuated_qpos_indices] = row[7:]
             else:
                 last_valid_qpos = self.ik_solver.get_reference_motion(rewind_to_time)[0]
             self.ik_solver.configuration.update(q=last_valid_qpos)
 
-        return int(rewind_to_time / self.timestep)
+        self.prev_qpos_ref = self.ik_solver.get_reference_motion(max(0., rewind_to_time-self.timestep))[0].copy()
+        return rewind_to_step
 
     def _finalize_release_if_needed(self):
         if self.release_info and self.release_info.get("finished", False):

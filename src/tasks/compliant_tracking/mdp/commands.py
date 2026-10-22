@@ -36,13 +36,21 @@ if TYPE_CHECKING:
   from mjlab.entity import Entity
   from mjlab.envs import ManagerBasedRlEnv
 
-# Force-event modes mixed for hybrid training, following the SoftMimic authors:
-# all forcefield + all collision-emulator files, and the zero-wrench files
-# repeated to give each mode equal weight (e.g. 40 + 40 + 5 x 8).
+# Force-event modes mixed for hybrid training. Per-mode weights relative to
+# the largest mode reproduce released Hybrid sampling: 40/40/5 files
+# become 40/40/40 effective files.
 _HYBRID_MODES = ("forcefield", "collision-emulator", "zero-wrench")
+_HYBRID_MODE_WEIGHTS = {
+  "forcefield": 1.0,
+  "collision-emulator": 1.0,
+  "zero-wrench": 1.0,
+}
 
 # Stiffness threshold marking the start of a force event (SoftMimic value).
 _FF_ACTIVE_THRESHOLD = 0.1
+
+_NOMINAL_KEYS = ("nominal_joint_pos", "nominal_joint_vel", "nominal_body_pos_w", "nominal_body_quat_w",
+                 "nominal_body_lin_vel_w", "nominal_body_ang_vel_w", "nominal_foot_contacts")
 
 _COMPLIANT_KEYS = (
   "force_body_index",
@@ -68,9 +76,9 @@ def resolve_motion_files(motion_source: str) -> list[Path]:
   """Resolve a motion file/directory into the list of NPZ files to load.
 
   A directory containing the augmentation mode subdirectories is expanded with
-  the SoftMimic hybrid mixing (zero-wrench files repeated to match the largest
-  mode); any other directory loads all NPZ files uniformly; a single NPZ file
-  loads as-is.
+  the SoftMimic hybrid mixing (files repeated toward the per-mode weights in
+  ``_HYBRID_MODE_WEIGHTS``, e.g. 40/40/5 files -> 40/40/40); any other
+  directory loads all NPZ files uniformly; a single NPZ file loads as-is.
   """
   source = Path(motion_source)
   if source.is_file():
@@ -79,21 +87,34 @@ def resolve_motion_files(motion_source: str) -> list[Path]:
     raise FileNotFoundError(f"Motion source not found: {source}")
 
   mode_dirs = [source / mode for mode in _HYBRID_MODES]
-  if all(d.is_dir() for d in mode_dirs):
-    per_mode = {d.name: sorted(d.glob("*.npz")) for d in mode_dirs}
+  if any(d.is_dir() for d in mode_dirs):
+    missing = [d.name for d in mode_dirs if not d.is_dir()]
+    if missing:
+      raise ValueError(f"Incomplete Hybrid dataset at {source}; missing modes: {missing}")
+    per_mode = {
+      d.name: sorted(path for path in d.glob("*.npz") if not path.name.startswith("."))
+      for d in mode_dirs
+    }
     max_count = max(len(files) for files in per_mode.values())
     files: list[Path] = []
     for mode in _HYBRID_MODES:
       mode_files = per_mode[mode]
       if not mode_files:
-        continue
-      repeats = max(max_count // len(mode_files), 1)
+        raise ValueError(f"Empty Hybrid mode: {source / mode}")
+      target_count = _HYBRID_MODE_WEIGHTS[mode] * max_count
+      repeats = max(round(target_count / len(mode_files)), 1)
       files.extend(mode_files * repeats)
     if not files:
       raise FileNotFoundError(f"No NPZ files found under {source}")
     return files
 
-  files = sorted(source.rglob("*.npz"))
+  # Failed replacement stages and retained backups live under hidden folders.
+  # They are not training data, including when the caller selects a parent
+  # directory rather than one canonical motion directory.
+  files = sorted(
+    path for path in source.rglob("*.npz")
+    if not any(part.startswith(".") for part in path.relative_to(source).parts)
+  )
   if not files:
     raise FileNotFoundError(f"No NPZ files found under {source}")
   return files
@@ -110,8 +131,13 @@ class CompliantMotionLoader:
     stacks: dict[str, list[np.ndarray]] = {}
     starts: list[int] = []
     total = 0
+    have_nominal = []
     for f in files:
       data = np.load(f)
+      have_nominal.append(all(k in data for k in _NOMINAL_KEYS))
+      if have_nominal[-1]:
+        for key in _NOMINAL_KEYS:
+          stacks.setdefault(key, []).append(data[key])
       num_frames = data["joint_pos"].shape[0]
       starts.append(total)
       total += num_frames
@@ -131,6 +157,15 @@ class CompliantMotionLoader:
         np.concatenate(stacks[key], axis=0), dtype=dtype, device=device
       )
 
+    self.has_nominal_reference = all(have_nominal)
+    if self.has_nominal_reference:
+      self.nominal_joint_pos = cat("nominal_joint_pos")
+      self.nominal_joint_vel = cat("nominal_joint_vel")
+      self.nominal_body_pos_w = cat("nominal_body_pos_w")[:, body_indexes]
+      self.nominal_body_quat_w = cat("nominal_body_quat_w")[:, body_indexes]
+      self.nominal_body_lin_vel_w = cat("nominal_body_lin_vel_w")[:, body_indexes]
+      self.nominal_body_ang_vel_w = cat("nominal_body_ang_vel_w")[:, body_indexes]
+      self.nominal_foot_contacts = cat("nominal_foot_contacts")
     self.joint_pos = cat("joint_pos")
     self.joint_vel = cat("joint_vel")
     self._body_pos_w = cat("body_pos_w")
@@ -144,6 +179,8 @@ class CompliantMotionLoader:
     self.body_ang_vel_w = self._body_ang_vel_w[:, self._body_indexes]
     self.root_pos_w = self._body_pos_w[:, 0]
     self.root_quat_w = self._body_quat_w[:, 0]
+    self.root_lin_vel_w = self._body_lin_vel_w[:, 0]
+    self.root_ang_vel_w = self._body_ang_vel_w[:, 0]
     self.time_step_total = self.joint_pos.shape[0]
 
     # Compliance channels.
@@ -204,12 +241,17 @@ class CompliantMotionCommand(MotionCommand):
     self.motion = CompliantMotionLoader(
       self.cfg.motion_file, self.body_indexes, device=self.device
     )
+    if cfg.require_nominal_reference and not self.motion.has_nominal_reference:
+      raise ValueError("Reference-conditioned compliance needs nominal_* NPZ arrays. "
+                       "Regenerate using scripts/compliant_csv_to_npz.py; adapted actor references leak the force target.")
     self.foot_body_indexes = torch.tensor(
       self.robot.find_bodies(_FOOT_BODY_NAMES, preserve_order=True)[0],
       dtype=torch.long,
       device=self.device,
     )
-    self.time_steps = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
+    self.motion_ids = torch.arange(self.num_envs, device=self.device) % self.motion.num_motions
+    self._phase_initialized = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+    self.time_steps = self.motion.motion_starts[self.motion_ids].clone()
     self.motion_end_steps = self.motion.motion_end_of(self.time_steps)
     self.body_pos_relative_w = torch.zeros(
       self.num_envs, len(cfg.body_names), 3, device=self.device
@@ -261,6 +303,7 @@ class CompliantMotionCommand(MotionCommand):
     self._ff_anchor_rot[:, 0] = 1.0
     self._ff_anchor_ref_pos = torch.zeros(self.num_envs, 3, device=self.device)
     self._last_ff_stiffness = torch.zeros(self.num_envs, device=self.device)
+    self._last_force_body = torch.full((self.num_envs,), -1, device=self.device, dtype=torch.long)
 
     self._force_vector_w = torch.zeros(self.num_envs, 3, device=self.device)
     self._torque_vector_w = torch.zeros(self.num_envs, 3, device=self.device)
@@ -294,11 +337,21 @@ class CompliantMotionCommand(MotionCommand):
     # so a playback-driven update is not mistaken for a user scrub.
     self._gui_suppress_time_cb: bool = False
     # Whether the dataset forcefield wrench is applied (see the
-    # `apply_forcefield_wrench` event). Always on during training; create_gui()
+    # `ForcefieldWrenchAction` term). Always on during training; create_gui()
     # turns it off by default for interactive play (GUI toggle re-enables it).
     self._dataset_forces_enabled: bool = True
 
     self._update_compliance_buffers()
+
+  @property
+  def command(self) -> torch.Tensor:
+    # Compatibility command; the actor consumes individual nominal channels.
+    if self.motion.has_nominal_reference:
+      return torch.cat((self.motion.nominal_joint_pos[self.time_steps],
+                        self.motion.nominal_joint_vel[self.time_steps]), dim=-1)
+    if self.cfg.require_nominal_reference:
+      raise ValueError("Missing original reference")
+    return super().command
 
   # -- Compliance properties (current frame) --
 
@@ -315,6 +368,18 @@ class CompliantMotionCommand(MotionCommand):
   @property
   def active_force_mask(self) -> torch.Tensor:
     return self._active_force_mask
+
+  def future_time_steps(self, future_steps: tuple[int, ...]) -> torch.Tensor:
+    """Global frame indices ``future_steps`` ahead of each env's current frame.
+
+    Indices are clamped to the last frame of the motion each env is currently
+    playing, so the future reference holds the final pose near a motion end
+    (SoftMimic's future-horizon behavior). Returns shape (num_envs, F).
+    """
+    steps = torch.as_tensor(future_steps, dtype=torch.long, device=self.device)
+    idx = self.time_steps.unsqueeze(1) + steps.unsqueeze(0)
+    last_frame = self.motion.motion_end_of(self.time_steps).unsqueeze(1) - 1
+    return torch.minimum(idx, last_frame)
 
   @property
   def target_forces_w(self) -> torch.Tensor:
@@ -402,8 +467,8 @@ class CompliantMotionCommand(MotionCommand):
       force[setpoint] = k[setpoint].unsqueeze(-1) * (
         origin[setpoint] - body_pos[setpoint]
       )
-    # Cap at the peak force of the augmentation pipeline (SoftMimic Table IV)
-    # so tracking errors cannot grow the virtual spring force unbounded.
+    # Optional explicit guard; released online forcefields are uncapped.
+    # Offline augmentation limits are not online wrench limits.
     magnitude = force.norm(dim=-1, keepdim=True)
     scale = (self.cfg.max_force / magnitude.clamp(min=1e-6)).clamp(max=1.0)
     return force * scale
@@ -439,7 +504,14 @@ class CompliantMotionCommand(MotionCommand):
         )
       self.time_steps[env_ids] = self.motion.motion_starts[motion_ids]
     elif self.cfg.sampling_mode == "uniform":
-      self._uniform_sampling(env_ids)
+      # Released motion IDs are fixed round-robin. Only the initial phase is
+      # random; failures resume the same clip at its current phase.
+      initial = env_ids[~self._phase_initialized[env_ids]]
+      if initial.numel():
+        starts = self.motion.motion_starts[self.motion_ids[initial]]
+        lengths = self.motion.motion_ends[self.motion_ids[initial]] - starts
+        self.time_steps[initial] = starts + (torch.rand(len(initial), device=self.device) * lengths).long()
+        self._phase_initialized[initial] = True
     else:
       assert self.cfg.sampling_mode == "adaptive"
       self._adaptive_sampling(env_ids)
@@ -451,21 +523,29 @@ class CompliantMotionCommand(MotionCommand):
   def _clear_force_state(self, env_ids: torch.Tensor):
     """Clear force-event/anchor state so the next frame re-anchors cleanly."""
     self._last_ff_stiffness[env_ids] = 0.0
+    self._last_force_body[env_ids] = -1
     self._active_force_mask[env_ids] = False
     self._force_vector_w[env_ids] = 0.0
     self._torque_vector_w[env_ids] = 0.0
     self._ff_anchor_rot[env_ids] = 0.0
     self._ff_anchor_rot[env_ids, 0] = 1.0
 
-  def _write_reference_state(self, env_ids: torch.Tensor):
-    """Teleport envs to the reference state at their current time step."""
-    root_pos = self.body_pos_w[:, 0].clone()
-    root_ori = self.body_quat_w[:, 0].clone()
-    root_lin_vel = self.body_lin_vel_w[:, 0].clone()
-    root_ang_vel = self.body_ang_vel_w[:, 0].clone()
+  def _write_reference_state(self, env_ids: torch.Tensor, *, nominal=False, randomize=True):
+    """Episode resets use adapted pose; clip loops use original pose, as released."""
+    if nominal:
+      t = self.time_steps
+      root_pos = self.motion.nominal_body_pos_w[t, 0].clone() + self._env.scene.env_origins
+      root_ori = self.motion.nominal_body_quat_w[t, 0].clone()
+      root_lin_vel = self.motion.nominal_body_lin_vel_w[t, 0].clone()
+      root_ang_vel = self.motion.nominal_body_ang_vel_w[t, 0].clone()
+    else:
+      root_pos = self.body_pos_w[:, 0].clone()
+      root_ori = self.body_quat_w[:, 0].clone()
+      root_lin_vel = self.body_lin_vel_w[:, 0].clone()
+      root_ang_vel = self.body_ang_vel_w[:, 0].clone()
 
     range_list = [
-      self.cfg.pose_range.get(key, (0.0, 0.0))
+      self.cfg.pose_range.get(key, (0.0, 0.0)) if randomize else (0.0, 0.0)
       for key in ["x", "y", "z", "roll", "pitch", "yaw"]
     ]
     ranges = torch.tensor(range_list, device=self.device)
@@ -478,7 +558,7 @@ class CompliantMotionCommand(MotionCommand):
     )
     root_ori[env_ids] = quat_mul(orientations_delta, root_ori[env_ids])
     range_list = [
-      self.cfg.velocity_range.get(key, (0.0, 0.0))
+      self.cfg.velocity_range.get(key, (0.0, 0.0)) if randomize else (0.0, 0.0)
       for key in ["x", "y", "z", "roll", "pitch", "yaw"]
     ]
     ranges = torch.tensor(range_list, device=self.device)
@@ -488,12 +568,12 @@ class CompliantMotionCommand(MotionCommand):
     root_lin_vel[env_ids] += rand_samples[:, :3]
     root_ang_vel[env_ids] += rand_samples[:, 3:]
 
-    joint_pos = self.joint_pos.clone()
-    joint_vel = self.joint_vel.clone()
+    joint_pos = (self.motion.nominal_joint_pos[self.time_steps] if nominal else self.joint_pos).clone()
+    joint_vel = (self.motion.nominal_joint_vel[self.time_steps] if nominal else self.joint_vel).clone()
 
     joint_pos += sample_uniform(
-      lower=self.cfg.joint_position_range[0],
-      upper=self.cfg.joint_position_range[1],
+      lower=self.cfg.joint_position_range[0] if randomize else 0.,
+      upper=self.cfg.joint_position_range[1] if randomize else 0.,
       size=joint_pos.shape,
       device=joint_pos.device,  # type: ignore
     )
@@ -600,7 +680,10 @@ class CompliantMotionCommand(MotionCommand):
     self.time_steps += 1
     env_ids = torch.where(self.time_steps >= self.motion_end_steps)[0]
     if env_ids.numel() > 0:
-      self._resample_command(env_ids)
+      motion_ids = (torch.searchsorted(self.motion.motion_starts, self.motion_end_steps[env_ids] - 1, right=True) - 1)
+      self.time_steps[env_ids] = self.motion.motion_starts[motion_ids]
+      self._clear_force_state(env_ids)
+      self._write_reference_state(env_ids, nominal=self.motion.has_nominal_reference, randomize=False)
     self._sync_time_slider()
 
     anchor_pos_w_repeat = self.anchor_pos_w[:, None, :].repeat(
@@ -618,8 +701,8 @@ class CompliantMotionCommand(MotionCommand):
 
     delta_pos_w = robot_anchor_pos_w_repeat
     delta_pos_w[..., 2] = anchor_pos_w_repeat[..., 2]
-    delta_ori_w = yaw_quat(
-      quat_mul(robot_anchor_quat_w_repeat, quat_inv(anchor_quat_w_repeat))
+    delta_ori_w = quat_mul(
+      yaw_quat(robot_anchor_quat_w_repeat), quat_inv(yaw_quat(anchor_quat_w_repeat))
     )
 
     self.body_quat_relative_w = quat_mul(delta_ori_w, self.body_quat_w)
@@ -627,19 +710,8 @@ class CompliantMotionCommand(MotionCommand):
       delta_ori_w, self.body_pos_w - anchor_pos_w_repeat
     )
 
-    # Anchored relative target for the force body (may not be a tracked body).
-    motion_force_body_pos = (
-      self.motion.force_body_pos_w[self.time_steps] + self._env.scene.env_origins
-    )
-    motion_force_body_quat = self.motion.force_body_quat_w[self.time_steps]
-    self.force_body_pos_relative_w = delta_pos_w[:, 0] + quat_apply(
-      delta_ori_w[:, 0], motion_force_body_pos - self.anchor_pos_w
-    )
-    self.force_body_quat_relative_w = quat_mul(
-      delta_ori_w[:, 0], motion_force_body_quat
-    )
-
     self._update_compliance_buffers()
+    self._update_force_body_targets()
 
     if self.cfg.sampling_mode == "adaptive":
       self.bin_failed_count = (
@@ -648,21 +720,34 @@ class CompliantMotionCommand(MotionCommand):
       )
       self._current_bin_failed.zero_()
 
+  def _update_force_body_targets(self):
+    """Keep the reward target fixed to the transform captured at force onset."""
+    position = self.motion.force_body_pos_w[self.time_steps] + self._env.scene.env_origins
+    self.force_body_pos_relative_w = self._ff_anchor_pos + quat_apply(
+      self._ff_anchor_rot, position - self._ff_anchor_ref_pos
+    )
+    self.force_body_quat_relative_w = quat_mul(
+      self._ff_anchor_rot, self.motion.force_body_quat_w[self.time_steps]
+    )
+
   def _update_compliance_buffers(self):
     """Anchor the forcefield to the robot pose at force onset and compute
     world-frame force/torque targets, following the SoftMimic release."""
     t = self.time_steps
     env_origins = self._env.scene.env_origins
 
-    ff_stiffness = self.motion.ff_stiffness[t]
+    ff_stiffness = torch.maximum(
+      self.motion.ff_stiffness[t], self.motion.ff_rotational_stiffness[t]
+    )
     ff_origin_w = self.motion.ff_origin[t] + env_origins
     ff_setpoint_rot_w = self.motion.ff_setpoint_rot[t].clone()
     ff_normal_w = self.motion.ff_normal[t].clone()
 
-    event_start = (self._last_ff_stiffness < _FF_ACTIVE_THRESHOLD) & (
-      ff_stiffness >= _FF_ACTIVE_THRESHOLD
+    event_active = (ff_stiffness >= _FF_ACTIVE_THRESHOLD) & (self.force_body_indexes >= 0)
+    event_start = event_active & (
+      (self._last_ff_stiffness < _FF_ACTIVE_THRESHOLD)
+      | (self._last_force_body != self.force_body_indexes)
     )
-    event_active = ff_stiffness >= _FF_ACTIVE_THRESHOLD
 
     if bool(event_start.any()):
       robot_root_pos = self.robot.data.root_link_pos_w[event_start]
@@ -672,8 +757,8 @@ class CompliantMotionCommand(MotionCommand):
       )
       motion_root_quat = self.motion.root_quat_w[t[event_start]]
       self._ff_anchor_pos[event_start] = robot_root_pos
-      self._ff_anchor_rot[event_start] = yaw_quat(
-        quat_mul(robot_root_quat, quat_inv(motion_root_quat))
+      self._ff_anchor_rot[event_start] = quat_mul(
+        yaw_quat(robot_root_quat), quat_inv(yaw_quat(motion_root_quat))
       )
       self._ff_anchor_ref_pos[event_start] = motion_root_pos
 
@@ -697,12 +782,21 @@ class CompliantMotionCommand(MotionCommand):
     self._ff_setpoint_rot_w = ff_setpoint_rot_w
     self._ff_normal_w = ff_normal_w
     self._last_ff_stiffness = ff_stiffness.clone()
+    self._last_force_body = self.force_body_indexes.clone()
 
     self._force_vector_w = quat_apply(self._ff_anchor_rot, self.motion.force_vector[t])
     self._torque_vector_w = quat_apply(
       self._ff_anchor_rot, self.motion.torque_vector[t]
     )
-    self._active_force_mask = self._force_vector_w.norm(dim=-1) > 1e-6
+    if self.cfg.force_computation_mode == "feedforward":
+      self._active_force_mask = (self.force_body_indexes >= 0) & (
+        (self._force_vector_w.norm(dim=-1) > 1e-6)
+        | (self._torque_vector_w.norm(dim=-1) > 1e-6)
+      )
+    else:
+      # A spring remains active at zero target wrench; pure torque events
+      # also need their rotational spring and force-link rewards.
+      self._active_force_mask = event_active
 
   def _update_metrics(self):
     super()._update_metrics()
@@ -873,10 +967,12 @@ class CompliantMotionCommandCfg(MotionCommandCfg):
   subdirectories (hybrid mixing as in the SoftMimic release).
   """
 
+  require_nominal_reference: bool = True
+
   force_computation_mode: Literal["feedforward", "forcefield"] = "forcefield"
-  # Peak wrench of the reactive forcefield (SoftMimic Table IV limits).
-  max_force: float = 140.0
-  max_torque: float = 10.0
+  # Optional guards; infinity preserves released online spring semantics.
+  max_force: float = math.inf
+  max_torque: float = math.inf
 
   def build(self, env: ManagerBasedRlEnv) -> CompliantMotionCommand:
     return CompliantMotionCommand(self, env)

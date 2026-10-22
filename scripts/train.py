@@ -22,6 +22,7 @@ from mjlab.utils.os import dump_yaml, get_checkpoint_path
 from mjlab.utils.torch import configure_torch_backends
 from mjlab.utils.wrappers import VideoRecorder
 from src.utils.deploy_export import export_deploy_cfg
+from src.utils.training_resume import prepare_training_iterations
 
 
 def _write_params_training_scripts(log_dir: Path) -> None:
@@ -32,9 +33,11 @@ def _write_params_training_scripts(log_dir: Path) -> None:
   repro = params_dir / "reproduce_train.sh"
   repro.write_text(
     "#!/usr/bin/env bash\n"
-    "# Auto-saved: re-run from the same working directory you used to start training.\n"
+    "# Auto-saved interpreter, working directory and training arguments.\n"
     "set -euo pipefail\n"
-    f"exec {shlex.join(sys.argv)}\n",
+    f"cd {shlex.quote(str(Path.cwd()))}\n"
+    f"export PYTHONPATH={shlex.quote(str(Path(__file__).resolve().parents[1]))}:{shlex.quote(str(Path(__file__).resolve().parents[1] / 'algorithms/rsl_rl'))}\n"
+    f"exec {shlex.join([sys.executable, *sys.argv])}\n",
     encoding="utf-8",
   )
   repro.chmod(repro.stat().st_mode | 0o111)
@@ -162,15 +165,30 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     runner.load(str(resume_path))
 
+  remaining_iterations = prepare_training_iterations(
+    runner, cfg.agent.max_iterations, resumed=resume_path is not None
+  )
+  print(
+    f"[INFO] Training iterations: next={runner.current_learning_iteration}, "
+    f"remaining={remaining_iterations}, total={cfg.agent.max_iterations}; "
+    f"learning_rate={runner.alg.learning_rate}"
+  )
+
   # Only write config files from rank 0 to avoid race conditions.
   if rank == 0:
     dump_yaml(log_dir / "params" / "env.yaml", env_cfg)
     dump_yaml(log_dir / "params" / "agent.yaml", agent_cfg)
     _write_params_training_scripts(log_dir)
     export_deploy_cfg(base_env, log_dir)
+    if cfg.motion_file:
+      dataset = Path(cfg.motion_file).resolve()
+      if dataset.is_dir():
+        for metadata in ("generation.json", "audit.json"):
+          if (dataset / metadata).is_file():
+            shutil.copy2(dataset / metadata, log_dir / "params" / ("dataset_" + metadata))
 
   runner.learn(
-    num_learning_iterations=cfg.agent.max_iterations,
+    num_learning_iterations=remaining_iterations,
     init_at_random_ep_len=cfg.init_at_random_ep_len,
   )
 

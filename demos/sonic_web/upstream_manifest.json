@@ -1,0 +1,67 @@
+[
+  {
+    "file": "upstream/coi-serviceworker.js",
+    "url": "https://nvlabs.github.io/GEAR-SONIC/coi-serviceworker.js",
+    "sha256": "03d2f35be3249f5eeb4e214c5daf2be8067e2b24630aaef26a1247b723f2d05d"
+  },
+  {
+    "file": "upstream/css/style.css",
+    "url": "https://nvlabs.github.io/GEAR-SONIC/css/style.css",
+    "sha256": "452934941a9c78b8ee612bf485103b5b03bb9d300ba56d8937dd38e4a0c0b0ea"
+  },
+  {
+    "file": "upstream/demo.html",
+    "url": "https://nvlabs.github.io/GEAR-SONIC/demo.html",
+    "sha256": "4ab9d5e42ff47f18ed8839907ccc17e0d9a5b30c808311e48a0f92808efbe90a"
+  },
+  {
+    "file": "upstream/demo.js",
+    "url": "https://nvlabs.github.io/GEAR-SONIC/js/demo.js",
+    "sha256": "0773ed4727e57252d7e6f5c3bc018e30c0976bc07dce8b392a44b025c65447b9"
+  },
+  {
+    "file": "upstream/js/policy.js",
+    "url": "https://nvlabs.github.io/GEAR-SONIC/js/policy.js",
+    "sha256": "940e0b2a67e429621ad66d1c66b3f27ef484125c370fa9bf299f56c3e499e14d"
+  },
+  {
+    "file": "upstream/js/viewer.js",
+    "url": "https://nvlabs.github.io/GEAR-SONIC/js/viewer.js",
+    "sha256": "559b0b2e2b33b0e2a8637adbfd77e5cdf8259e846c8542c026ebf138ee2808b9"
+  },
+  {
+    "file": "lib/mujoco_wasm.js",
+    "url": "https://nvlabs.github.io/GEAR-SONIC/lib/mujoco_wasm.js",
+    "sha256": "db71420fe1a5fa817c7fb710f4538079764751518f78ece6f1a0443f95a3504b"
+  },
+  {
+    "file": "lib/mujoco_wasm.wasm",
+    "url": "https://nvlabs.github.io/GEAR-SONIC/lib/mujoco_wasm.wasm",
+    "sha256": "780962c20684d1f029b31b45f25ca83e511c7c75a7bee3bd2fcebdcf8d81fe4f"
+  },
+  {
+    "file": "lib/ort-wasm-simd-threaded.mjs",
+    "url": "https://nvlabs.github.io/GEAR-SONIC/lib/ort-wasm-simd-threaded.mjs",
+    "sha256": "745eb7c0ce6f18a6aa521971b2877babc7ffb27eecb58ab3bc6e5ef4692672e8"
+  },
+  {
+    "file": "lib/ort-wasm-simd-threaded.wasm",
+    "url": "https://nvlabs.github.io/GEAR-SONIC/lib/ort-wasm-simd-threaded.wasm",
+    "sha256": "207d02be4591c156b0a98f024f3d58005b5b04c92274d759fb390338c63559ea"
+  },
+  {
+    "file": "lib/ort.min.js",
+    "url": "https://nvlabs.github.io/GEAR-SONIC/lib/ort.min.js",
+    "sha256": "be6e560b64c03c99252eedc0e1989e9e51e44d9f191e7655c9bf011bf9f576c8"
+  },
+  {
+    "file": "lib/three/OrbitControls.js",
+    "url": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/controls/OrbitControls.js",
+    "sha256": "f260591ef315aa04888152e7f121865214e33fb54727145cf4e4445058db1297"
+  },
+  {
+    "file": "lib/three/three.module.js",
+    "url": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+    "sha256": "ec3ddc3897ec75288b5502057456c471c2eb7d6e7cf36140d0a5224e94a1984b"
+  }
+]

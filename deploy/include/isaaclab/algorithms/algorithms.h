@@ -6,6 +6,11 @@
 #include "onnxruntime_cxx_api.h"
 #include <iostream>
 #include <mutex>
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <stdexcept>
+#include <unordered_map>
 
 namespace isaaclab
 {
@@ -34,6 +39,7 @@ public:
         // Init Model
         env = Ort::Env(ORT_LOGGING_LEVEL_WARNING, "onnx_model");
         session_options.SetGraphOptimizationLevel(ORT_ENABLE_EXTENDED);
+        session_options.SetIntraOpNumThreads(1);
 
         session = std::make_unique<Ort::Session>(env, model_path.c_str(), session_options);
 
@@ -47,6 +53,7 @@ public:
         for (const auto& shape : input_shapes) {
             size_t size = 1;
             for (const auto& dim : shape) {
+                if (dim <= 0) throw std::runtime_error("Deployment requires fixed positive ONNX dimensions.");
                 size *= dim;
             }
             input_sizes.push_back(size);
@@ -55,6 +62,8 @@ public:
         // Get output shape
         Ort::TypeInfo output_type = session->GetOutputTypeInfo(0);
         output_shape = output_type.GetTensorTypeAndShapeInfo().GetShape();
+        if (output_shape.size() != 2 || output_shape[0] != 1 || output_shape[1] <= 0)
+            throw std::runtime_error("Expected a single-batch action vector from ONNX.");
         auto output_name = session->GetOutputNameAllocated(0, allocator);
         output_names.push_back(output_name.release());
 
@@ -78,6 +87,10 @@ public:
         {
             const std::string name_str(input_names[i]);
             auto& input_data = obs.at(name_str);
+            if (input_data.size() != static_cast<size_t>(input_sizes[i]))
+                throw std::runtime_error("Observation size does not match ONNX input " + name_str);
+            if (!std::all_of(input_data.begin(), input_data.end(), [](float x){ return std::isfinite(x); }))
+                throw std::runtime_error("Non-finite deployment observation.");
             auto input_tensor = Ort::Value::CreateTensor<float>(memory_info, input_data.data(), input_sizes[i], input_shapes[i].data(), input_shapes[i].size());
             input_tensors.push_back(std::move(input_tensor));
         }
@@ -87,6 +100,8 @@ public:
 
         // Copy output data
         auto floatarr = output_tensor.front().GetTensorMutableData<float>();
+        if (!std::all_of(floatarr, floatarr + output_shape[1], [](float x){ return std::isfinite(x); }))
+            throw std::runtime_error("Non-finite ONNX action.");
         std::lock_guard<std::mutex> lock(act_mtx_);
         std::memcpy(action.data(), floatarr, output_shape[1] * sizeof(float));
         return action;

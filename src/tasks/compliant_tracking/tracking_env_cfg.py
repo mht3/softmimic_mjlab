@@ -29,7 +29,13 @@ from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
 
 import src.tasks.compliant_tracking.mdp as mdp
+from src.tasks.compliant_tracking.mdp.parity_events import make_softmimic_parameter_events
 from src.tasks.compliant_tracking.mdp import CompliantMotionCommandCfg
+
+# SoftMimic critic future-reference horizon: 20 points subsampled from a
+# 100-step (2 s at 50 Hz) window.
+_FUTURE_STEPS = (1, *range(5, 100, 5))
+
 
 def make_compliant_tracking_env_cfg(
   history_length: int = 3,
@@ -45,156 +51,75 @@ def make_compliant_tracking_env_cfg(
   # Observations
   ##
 
-  # SoftMimic Table III: 3-step history on proprioception, reference motion,
-  # action, and the desired-stiffness command (log scale). Noise ranges follow
-  # Table V. The 20-point future reference horizon is not (yet) ported.
-  actor_terms = {
-    "command": ObservationTermCfg(
-      func=mdp.generated_commands,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "motion_anchor_pos_b": ObservationTermCfg(
-      func=mdp.motion_anchor_pos_b,
-      params={"command_name": "motion"},
-      noise=Unoise(n_min=-0.25, n_max=0.25),
-      history_length=history_length,
-    ),
-    "motion_anchor_ori_b": ObservationTermCfg(
-      func=mdp.motion_anchor_ori_b,
-      params={"command_name": "motion"},
-      noise=Unoise(n_min=-0.05, n_max=0.05),
-      history_length=history_length,
-    ),
-    "base_lin_vel": ObservationTermCfg(
-      func=mdp.builtin_sensor,
-      params={"sensor_name": "robot/imu_lin_vel"},
-      noise=Unoise(n_min=-0.5, n_max=0.5),
-      history_length=history_length,
-    ),
-    "base_ang_vel": ObservationTermCfg(
-      func=mdp.builtin_sensor,
-      params={"sensor_name": "robot/imu_ang_vel"},
-      noise=Unoise(n_min=-0.2, n_max=0.2),
-      history_length=history_length,
-    ),
-    "joint_pos": ObservationTermCfg(
-      func=mdp.joint_pos_rel,
-      noise=Unoise(n_min=-0.01, n_max=0.01),
-      params={"biased": True},
-      history_length=history_length,
-    ),
-    "joint_vel": ObservationTermCfg(
-      func=mdp.joint_vel_rel,
-      noise=Unoise(n_min=-1.5, n_max=1.5),
-      history_length=history_length,
-    ),
-    "actions": ObservationTermCfg(func=mdp.last_action, history_length=history_length),
-    "desired_stiffness_log": ObservationTermCfg(
-      func=mdp.desired_stiffness_log,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "desired_rotational_stiffness_log": ObservationTermCfg(
-      func=mdp.desired_rotational_stiffness_log,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-  }
+  # Released actor: original reference + proprioception + stiffness. Each
+  # term stacks its own history (327 inputs at23DOF and history3).
+  def obs(func, *, params=None, noise=None, scale=None, history=True):
+    return ObservationTermCfg(
+      func=func, params=params or {}, noise=noise, scale=scale,
+      history_length=history_length if history else 0,
+    )
 
-  critic_terms = {
-    "command": ObservationTermCfg(
-      func=mdp.generated_commands,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "motion_anchor_pos_b": ObservationTermCfg(
-      func=mdp.motion_anchor_pos_b,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "motion_anchor_ori_b": ObservationTermCfg(
-      func=mdp.motion_anchor_ori_b,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "body_pos": ObservationTermCfg(
-      func=mdp.robot_body_pos_b,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "body_ori": ObservationTermCfg(
-      func=mdp.robot_body_ori_b,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "base_lin_vel": ObservationTermCfg(
-      func=mdp.builtin_sensor,
-      params={"sensor_name": "robot/imu_lin_vel"},
-      history_length=history_length,
-    ),
-    "base_ang_vel": ObservationTermCfg(
-      func=mdp.builtin_sensor,
-      params={"sensor_name": "robot/imu_ang_vel"},
-      history_length=history_length,
-    ),
-    "joint_pos": ObservationTermCfg(func=mdp.joint_pos_rel, history_length=history_length),
-    "joint_vel": ObservationTermCfg(func=mdp.joint_vel_rel, history_length=history_length),
-    "actions": ObservationTermCfg(func=mdp.last_action, history_length=history_length),
-    # Privileged compliance state (SoftMimic).
-    "force_applied": ObservationTermCfg(
-      func=mdp.forcefield_force_applied,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "torque_applied": ObservationTermCfg(
-      func=mdp.forcefield_torque_applied,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "force_desired": ObservationTermCfg(
-      func=mdp.forcefield_force_desired,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "torque_desired": ObservationTermCfg(
-      func=mdp.forcefield_torque_desired,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "desired_stiffness_log": ObservationTermCfg(
-      func=mdp.desired_stiffness_log,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "desired_rotational_stiffness_log": ObservationTermCfg(
-      func=mdp.desired_rotational_stiffness_log,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "forcefield_stiffness_log": ObservationTermCfg(
-      func=mdp.forcefield_stiffness_log,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
-    "forcefield_rotational_stiffness_log": ObservationTermCfg(
-      func=mdp.forcefield_rotational_stiffness_log,
-      params={"command_name": "motion"},
-      history_length=history_length,
-    ),
+  refs = {
+    "reference_dof_pos": mdp.reference_dof_pos,
+    "reference_xy_vel": mdp.reference_xy_vel,
+    "reference_yaw_vel": mdp.reference_ang_vel,
+    "reference_root_height": mdp.reference_root_height,
+    "reference_gravity_vector": mdp.reference_gravity_vector,
+    "reference_foot_contact": mdp.reference_foot_contacts,
   }
+  actor_terms = {
+    "base_ang_vel": obs(mdp.base_ang_vel, noise=Unoise(n_min=-.2, n_max=.2), scale=.25),
+    "projected_gravity": obs(mdp.projected_gravity, noise=Unoise(n_min=-.01, n_max=.01)),
+    "joint_pos": obs(mdp.joint_pos_rel, noise=Unoise(n_min=-.01, n_max=.01)),
+    "joint_vel": obs(mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5), scale=.05),
+    "actions": obs(mdp.last_action),
+  }
+  for name, func in refs.items():
+    actor_terms[name] = obs(func, params={"command_name": "motion", "nominal": True})
+  actor_terms["desired_stiffness_log"] = obs(mdp.desired_stiffness_log, params={"command_name": "motion"})
+  actor_terms["desired_rotational_stiffness_log"] = obs(mdp.desired_rotational_stiffness_log, params={"command_name": "motion"})
+
+  # Critic contains nominal AND adapted references, with both future horizons.
+  # Its force vectors have distinct left/right hand slots in body-local frames.
+  critic_terms = {
+    "base_ang_vel": obs(mdp.base_ang_vel, scale=.25),
+    "projected_gravity": obs(mdp.projected_gravity),
+    "joint_pos": obs(mdp.joint_pos_rel),
+    "joint_vel": obs(mdp.joint_vel_rel, scale=.05),
+    "actions": obs(mdp.last_action),
+    "base_lin_vel": obs(mdp.base_lin_vel),
+    "root_height": obs(mdp.root_height),
+    "foot_contact": obs(mdp.foot_contact, params={"sensor_name": "feet_ground_contact"}),
+    "foot_contact_forces": obs(mdp.foot_contact_forces, params={"sensor_name": "feet_ground_contact"}, history=False),
+    "foot_velocities": obs(mdp.foot_velocities, params={"command_name": "motion"}, history=False),
+  }
+  for name, func in refs.items():
+    critic_terms[name] = obs(func, params={"command_name": "motion", "nominal": True})
+  critic_terms["keypoint_error"] = obs(mdp.keypoint_error_local_shifted, params={"command_name": "motion"})
+  for name, func in (
+    ("force_applied", mdp.forcefield_force_applied),
+    ("torque_applied", mdp.forcefield_torque_applied),
+    ("desired_stiffness_log", mdp.desired_stiffness_log),
+    ("desired_rotational_stiffness_log", mdp.desired_rotational_stiffness_log),
+    ("forcefield_stiffness_log", mdp.forcefield_stiffness_log),
+    ("forcefield_rotational_stiffness_log", mdp.forcefield_rotational_stiffness_log),
+    ("forcefield_force_desired", mdp.forcefield_force_desired),
+    ("forcefield_torque_desired", mdp.forcefield_torque_desired),
+    ("all_adapted_keypoints_pos_error_local", mdp.all_adapted_keypoints_pos_error_local),
+    ("all_adapted_keypoints_quat_error_local", mdp.all_adapted_keypoints_quat_error_local),
+  ):
+    critic_terms[name] = obs(func, params={"command_name": "motion"})
+  for name, func in refs.items():
+    critic_terms["adapted_" + name] = obs(func, params={"command_name": "motion", "nominal": False})
+  for nominal, prefix in ((True, ""), (False, "adapted_")):
+    for name, func in refs.items():
+      critic_terms[prefix + name + "_future"] = obs(func, params={
+        "command_name": "motion", "nominal": nominal, "future_steps": _FUTURE_STEPS,
+      }, history=False)
 
   observations = {
-    "actor": ObservationGroupCfg(
-      terms=actor_terms,
-      concatenate_terms=True,
-      enable_corruption=True,
-    ),
-    "critic": ObservationGroupCfg(
-      terms=critic_terms,
-      concatenate_terms=True,
-      enable_corruption=False,
-    ),
+    "actor": ObservationGroupCfg(terms=actor_terms, concatenate_terms=True, enable_corruption=True),
+    "critic": ObservationGroupCfg(terms=critic_terms, concatenate_terms=True, enable_corruption=False),
   }
 
   ##
@@ -207,7 +132,13 @@ def make_compliant_tracking_env_cfg(
       actuator_names=(".*",),
       scale=0.25,
       use_default_offset=True,
-    )
+    ),
+    # Zero-dim term rotates the body-local wrench cached at policy rate
+    # into MuJoCo world coordinates each physics substep.
+    "forcefield_wrench": mdp.ForcefieldWrenchActionCfg(
+      entity_name="robot",
+      command_name="motion",
+    ),
   }
 
   ##
@@ -237,81 +168,11 @@ def make_compliant_tracking_env_cfg(
 
   # No random pushes during training: the dataset force events are the only
   # perturbations (SoftMimic). Random pushes fight the onset-anchored
-  # forcefield spring and blow up the applied force.
+  # forcefield spring and blow up the applied force. The forcefield wrench
+  # itself is applied per-substep by the "forcefield_wrench" action term.
   events: dict[str, EventTermCfg] = {
-    "apply_forcefield": EventTermCfg(
-      func=mdp.apply_forcefield_wrench,
-      mode="step",
-      params={"command_name": "motion"},
-    ),
-    # Payload mass and link mass scale follow SoftMimic Table V.
-    "payload_mass": EventTermCfg(
-      mode="startup",
-      func=dr.body_mass,
-      params={
-        "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set in robot cfg.
-        "operation": "add",
-        "ranges": (-2.0, 2.0),
-      },
-    ),
-    "link_mass_scale": EventTermCfg(
-      mode="startup",
-      func=dr.pseudo_inertia,
-      params={
-        "asset_cfg": SceneEntityCfg("robot", body_names=(".*",)),
-        # Mass/inertia scale = e^alpha, so this is a [0.7, 1.3] mass scale.
-        "alpha_range": (math.log(0.7), math.log(1.3)),
-      },
-    ),
-    "base_com": EventTermCfg(
-      mode="startup",
-      func=dr.body_com_offset,
-      params={
-        "asset_cfg": SceneEntityCfg("robot", body_names=()),  # Set in robot cfg.
-        "operation": "add",
-        "ranges": {
-          0: (-0.05, 0.05),
-          1: (-0.05, 0.05),
-          2: (-0.05, 0.05),
-        },
-      },
-    ),
-    "encoder_bias": EventTermCfg(
-      mode="startup",
-      func=dr.encoder_bias,
-      params={
-        "asset_cfg": SceneEntityCfg("robot"),
-        "bias_range": (-0.01, 0.01),
-      },
-    ),
-    # Joint parameter randomization (added), SoftMimic Table V.
-    "joint_damping": EventTermCfg(
-      mode="startup",
-      func=dr.joint_damping,
-      params={
-        "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
-        "operation": "add",
-        "ranges": (0.0, 2.0),
-      },
-    ),
-    "joint_armature": EventTermCfg(
-      mode="startup",
-      func=dr.joint_armature,
-      params={
-        "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
-        "operation": "add",
-        "ranges": (0.01, 0.1),
-      },
-    ),
-    "joint_friction": EventTermCfg(
-      mode="startup",
-      func=dr.joint_friction,
-      params={
-        "asset_cfg": SceneEntityCfg("robot", joint_names=(".*",)),
-        "operation": "add",
-        "ranges": (0.0, 0.01),
-      },
-    ),
+    **make_softmimic_parameter_events(),
+    "forcefield_cache": EventTermCfg(mode="step", func=mdp.cache_forcefield_wrench),
     # Foot geoms have contact priority over the terrain, so this IS the
     # ground friction; range follows SoftMimic Table V.
     "foot_friction": EventTermCfg(
@@ -354,6 +215,12 @@ def make_compliant_tracking_env_cfg(
       params={"command_name": "motion", "sigma": 2.0},
     ),
     # -- Motion tracking --
+    # Retained in the released implementation (omitted from paper TableVI).
+    "joint_position_tracking": RewardTermCfg(
+      func=mdp.joint_deviation_from_command_exp,
+      weight=2.0,
+      params={"command_name": "motion", "sigma": 1.0},
+    ),
     "motion_body_pos": RewardTermCfg(
       func=mdp.motion_relative_body_position_error_exp,
       weight=2.0,
@@ -403,7 +270,7 @@ def make_compliant_tracking_env_cfg(
       params={"command_name": "motion", "sensor_name": "feet_ground_contact"},
     ),
     # No self-collision penalty, matching SoftMimic (they disable
-    # self-collision physics; here MuJoCo still resolves the contacts).
+    # self-collision physics in the SoftMimic robot preset).
   }
 
   ##
@@ -412,25 +279,9 @@ def make_compliant_tracking_env_cfg(
 
   terminations: dict[str, TerminationTermCfg] = {
     "time_out": TerminationTermCfg(func=mdp.time_out, time_out=True),
-    "anchor_pos": TerminationTermCfg(
-      func=mdp.bad_anchor_pos_z_only,
-      params={"command_name": "motion", "threshold": 0.25},
-    ),
-    "anchor_ori": TerminationTermCfg(
-      func=mdp.bad_anchor_ori,
-      params={
-        "asset_cfg": SceneEntityCfg("robot"),
-        "command_name": "motion",
-        "threshold": 0.8,
-      },
-    ),
-    "ee_body_pos": TerminationTermCfg(
-      func=mdp.bad_motion_body_pos_z_only,
-      params={
-        "command_name": "motion",
-        "threshold": 0.25,
-        "body_names": (),  # Set per-robot.
-      },
+    "bad_keypoints": TerminationTermCfg(
+      func=mdp.bad_motion_body_pos,
+      params={"command_name": "motion", "threshold": .5},
     ),
   }
 

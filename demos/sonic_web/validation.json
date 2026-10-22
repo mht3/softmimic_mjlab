@@ -1,0 +1,9 @@
+{
+  "observation_contract": "PASS: all 327 channels, six frames with rollover and reset against mjlab CircularBuffer/quaternion utilities",
+  "drag_force": "PASS: body-local anchor, world force, lever-arm torque, reset cleanup",
+  "browser_onnx": "PASS: diagnostic smoke export compared against ONNX CPU ReferenceEvaluator",
+  "browser_onnx_max_abs_error": 1.1920928955078125e-07,
+  "ui": "Verified original layout, 23DOF rendering, free physics fall, reset to nominal stand, camera follow",
+  "trained_policy_installed": false,
+  "trained_compliance_behavior_validated": false
+}

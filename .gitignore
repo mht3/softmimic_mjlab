@@ -14,3 +14,26 @@ src/assets/motions/g1/dance1_subject2.npz
 simulate/build
 **/__pycache__
 **/release_examples/
+
+# Publish the reviewed iteration-9000 demo snapshot explicitly.
+demos/policies/**/*.onnx
+!demos/policies/stand_9000/exported/policy.onnx
+!demos/sonic_web/assets/policy/policy.onnx
+
+# Local motion libraries and reproducible IK/conversion outputs.
+/datasets/motions_csv/
+/datasets/reference23/
+/datasets/streamer/*
+!/datasets/streamer/stand.csv
+/src/assets/compliant_motions/
+/src/assets/compliant_motions_ref23/
+/src/assets/motions/
+/deploy/robots/**/config/policy/**/*.npz
+
+# Rebuild viewer assets from source meshes, the example CSV and published ONNX.
+/demos/sonic_web/assets/robot/
+/demos/sonic_web/assets/motions/
+/demos/sonic_web/assets/policy/config.json
+/demos/policies/*/params/reference.csv
+/demos/policies/*/params/reference.json
+/demos/policies/*/params/stand.npz

@@ -13,8 +13,8 @@ std::shared_ptr<State_Mimic::MotionLoader_> State_Mimic::motion = nullptr;
 // Initialized from the FSM config and adjustable online via the remote
 // (up/down: translational, left/right: rotational). Ranges follow the
 // SoftMimic training distribution.
-static float desired_stiffness = 200.0f;           // [N/m], range [40, 1000]
-static float desired_rotational_stiffness = 1.0f;  // [Nm/rad], range [0.1, 10]
+static std::atomic<float> desired_stiffness{200.0f};           // [N/m], range [40, 1000]
+static std::atomic<float> desired_rotational_stiffness{1.0f};  // [Nm/rad], range [0.1, 10]
 
 
 Eigen::Quaternionf robot_quat_w(isaaclab::ManagerBasedRLEnv* env)
@@ -86,12 +86,12 @@ REGISTER_OBSERVATION(motion_anchor_ori_b)
 
 REGISTER_OBSERVATION(desired_stiffness_log)
 {
-    return { std::log(std::max(desired_stiffness, 1e-6f)) };
+    return { std::log(desired_stiffness + 1e-6f) };
 }
 
 REGISTER_OBSERVATION(desired_rotational_stiffness_log)
 {
-    return { std::log(std::max(desired_rotational_stiffness, 1e-6f)) };
+    return { std::log(desired_rotational_stiffness + 1e-6f) };
 }
 
 }
@@ -141,7 +141,7 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
         desired_rotational_stiffness = cfg["desired_rotational_stiffness"].as<float>();
     }
     spdlog::info("Desired stiffness: {:.1f} N/m, rotational: {:.2f} Nm/rad",
-                 desired_stiffness, desired_rotational_stiffness);
+                 desired_stiffness.load(), desired_rotational_stiffness.load());
 
     env = std::make_unique<isaaclab::ManagerBasedRLEnv>(
         YAML::LoadFile(policy_dir / "params" / "deploy.yaml"),
@@ -155,6 +155,10 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
     }
 
     const auto & joy = FSMState::lowstate->joystick;
+    this->registered_checks.emplace_back(
+        std::make_pair([this]()->bool { return policy_fault.load(); },
+                       FSMStringMap.right.at("Passive"))
+    );
     if (!loop_) {
         this->registered_checks.emplace_back(
             std::make_pair(
@@ -173,13 +177,14 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
 
 void State_Mimic::enter()
 {
+    policy_fault = false;
     // set gain
     for (int i = 0; i < env->robot->data.joint_stiffness.size(); i++)
     {
-        lowcmd->msg_.motor_cmd()[i].kp() = env->robot->data.joint_stiffness[i];
-        lowcmd->msg_.motor_cmd()[i].kd() = env->robot->data.joint_damping[i];
-        lowcmd->msg_.motor_cmd()[i].dq() = 0;
-        lowcmd->msg_.motor_cmd()[i].tau() = 0;
+        lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].kp() = env->robot->data.joint_stiffness[i];
+        lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].kd() = env->robot->data.joint_damping[i];
+        lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].dq() = 0;
+        lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].tau() = 0;
     }
 
     motion = motion_; // set for specific motion
@@ -214,7 +219,14 @@ void State_Mimic::enter()
                 }
             }
             motion->update(motion_time);
-            env->step();
+            try {
+                env->step();
+            } catch (const std::exception& error) {
+                spdlog::error("Compliance policy failed; requesting Passive: {}", error.what());
+                policy_fault = true;
+                policy_thread_running = false;
+                break;
+            }
 
             // Sleep
             std::this_thread::sleep_until(sleepTill);
@@ -230,19 +242,19 @@ void State_Mimic::run()
     const auto & joy = FSMState::lowstate->joystick;
     if (joy.up.on_pressed) {
         desired_stiffness = std::min(desired_stiffness * 1.25f, 1000.0f);
-        spdlog::info("desired_stiffness -> {:.1f} N/m", desired_stiffness);
+        spdlog::info("desired_stiffness -> {:.1f} N/m", desired_stiffness.load());
     }
     if (joy.down.on_pressed) {
         desired_stiffness = std::max(desired_stiffness / 1.25f, 40.0f);
-        spdlog::info("desired_stiffness -> {:.1f} N/m", desired_stiffness);
+        spdlog::info("desired_stiffness -> {:.1f} N/m", desired_stiffness.load());
     }
     if (joy.right.on_pressed) {
         desired_rotational_stiffness = std::min(desired_rotational_stiffness * 1.25f, 10.0f);
-        spdlog::info("desired_rotational_stiffness -> {:.2f} Nm/rad", desired_rotational_stiffness);
+        spdlog::info("desired_rotational_stiffness -> {:.2f} Nm/rad", desired_rotational_stiffness.load());
     }
     if (joy.left.on_pressed) {
         desired_rotational_stiffness = std::max(desired_rotational_stiffness / 1.25f, 0.1f);
-        spdlog::info("desired_rotational_stiffness -> {:.2f} Nm/rad", desired_rotational_stiffness);
+        spdlog::info("desired_rotational_stiffness -> {:.2f} Nm/rad", desired_rotational_stiffness.load());
     }
 
     auto action = env->action_manager->processed_actions();

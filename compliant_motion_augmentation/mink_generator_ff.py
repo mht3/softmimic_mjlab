@@ -4,6 +4,10 @@ import os
 import sys
 from dataclasses import replace as dataclasses_replace
 
+# Establish package imports before the optional dependency probes. The launcher
+# runs this file with cwd set to this directory, not the repository root.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
 
 try:
@@ -36,8 +40,7 @@ __all__ = ["SimulationConfig", "G1_Mink_IK_Solver", "run_simulation_or_generatio
 
 def main():
     if any(lib is None for lib in [mink, ProceduralMotionLibFromDemo, pd]):
-        print("Aborting due to missing dependencies.")
-        return
+        raise RuntimeError("Missing generation dependency: install mink and make softmimic_deploy importable")
 
     script_dir = os.path.dirname(os.path.realpath(__file__))
     # Solve IK on the 23-DOF robot we deploy. The reference CSV must be a 23-DOF
@@ -131,8 +134,7 @@ def main():
 
     args = parser.parse_args()
     if not os.path.exists(args.model_path):
-        print(f"Error: Model file not found at '{args.model_path}'")
-        return
+        raise FileNotFoundError(args.model_path)
 
     config = SimulationConfig(**vars(args))
 

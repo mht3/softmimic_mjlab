@@ -58,6 +58,9 @@
 #pragma once
 
 #include <functional>
+#include <chrono>
+#include <type_traits>
+#include <utility>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -156,36 +159,48 @@ inline std::string ToLower(std::string s) {
   return s;
 }
 
-// Retrieve KeyBase from UnitreeJoystick (case-insensitive)
-inline const KeyBase& GetKey(const UnitreeJoystick& joy, std::string_view name_sv) {
+// Support SDK versions with separate Button/Axis types as well as KeyBase.
+struct KeySnapshot {
+  bool pressed, on_pressed, on_released;
+  double pressed_time;
+};
+template<class T, class = void> struct HasPressedTime : std::false_type {};
+template<class T> struct HasPressedTime<T, std::void_t<decltype(std::declval<T>().pressed_time)>> : std::true_type {};
+template<class T> inline KeySnapshot Snapshot(const T& key) {
+  double held = -1.0;
+  if constexpr (HasPressedTime<T>::value) held = key.pressed_time;
+  return {key.pressed, key.on_pressed, key.on_released, held};
+}
+// Retrieve an immutable snapshot (case-insensitive).
+inline KeySnapshot GetKey(const UnitreeJoystick& joy, std::string_view name_sv) {
   const std::string name = ToLower(std::string{name_sv});
-  static const std::unordered_map<std::string, const KeyBase* (*)(const UnitreeJoystick&)> kMap = {
-    {"back", [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.back); }},
-    {"start",[](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.start); }},
-    {"ls",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.LS); }},
-    {"rs",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.RS); }},
-    {"lb",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.LB); }},
-    {"rb",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.RB); }},
-    {"a",    [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.A); }},
-    {"b",    [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.B); }},
-    {"x",    [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.X); }},
-    {"y",    [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.Y); }},
-    {"up",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.up); }},
-    {"down", [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.down); }},
-    {"left", [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.left); }},
-    {"right",[](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.right); }},
-    {"f1",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.F1); }},
-    {"f2",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.F2); }},
-    {"lx",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.lx); }},
-    {"ly",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.ly); }},
-    {"rx",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.rx); }},
-    {"ry",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.ry); }},
-    {"lt",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.LT); }},
-    {"rt",   [](auto& j)->const KeyBase*{ return &static_cast<const KeyBase&>(j.RT); }},
+  static const std::unordered_map<std::string, KeySnapshot (*)(const UnitreeJoystick&)> kMap = {
+    {"back", [](auto& j)->KeySnapshot{ return Snapshot(j.back); }},
+    {"start",[](auto& j)->KeySnapshot{ return Snapshot(j.start); }},
+    {"ls",   [](auto& j)->KeySnapshot{ return Snapshot(j.LS); }},
+    {"rs",   [](auto& j)->KeySnapshot{ return Snapshot(j.RS); }},
+    {"lb",   [](auto& j)->KeySnapshot{ return Snapshot(j.LB); }},
+    {"rb",   [](auto& j)->KeySnapshot{ return Snapshot(j.RB); }},
+    {"a",    [](auto& j)->KeySnapshot{ return Snapshot(j.A); }},
+    {"b",    [](auto& j)->KeySnapshot{ return Snapshot(j.B); }},
+    {"x",    [](auto& j)->KeySnapshot{ return Snapshot(j.X); }},
+    {"y",    [](auto& j)->KeySnapshot{ return Snapshot(j.Y); }},
+    {"up",   [](auto& j)->KeySnapshot{ return Snapshot(j.up); }},
+    {"down", [](auto& j)->KeySnapshot{ return Snapshot(j.down); }},
+    {"left", [](auto& j)->KeySnapshot{ return Snapshot(j.left); }},
+    {"right",[](auto& j)->KeySnapshot{ return Snapshot(j.right); }},
+    {"f1",   [](auto& j)->KeySnapshot{ return Snapshot(j.F1); }},
+    {"f2",   [](auto& j)->KeySnapshot{ return Snapshot(j.F2); }},
+    {"lx",   [](auto& j)->KeySnapshot{ return Snapshot(j.lx); }},
+    {"ly",   [](auto& j)->KeySnapshot{ return Snapshot(j.ly); }},
+    {"rx",   [](auto& j)->KeySnapshot{ return Snapshot(j.rx); }},
+    {"ry",   [](auto& j)->KeySnapshot{ return Snapshot(j.ry); }},
+    {"lt",   [](auto& j)->KeySnapshot{ return Snapshot(j.LT); }},
+    {"rt",   [](auto& j)->KeySnapshot{ return Snapshot(j.RT); }},
   };
   auto it = kMap.find(name);
   if (it == kMap.end()) throw std::runtime_error("Unknown key name: " + std::string(name_sv));
-  return *it->second(joy);
+  return it->second(joy);
 }
 
 // ======================== Recursive Descent Parser ========================
@@ -310,13 +325,19 @@ inline std::function<bool(const UnitreeJoystick&)> Compile(const Node& n) {
   switch (n.kind) {
     case Node::kAtom: {
       Atom a = n.atom;
-      return [a](const UnitreeJoystick& joy) -> bool {
-        const KeyBase& kb = GetKey(joy, a.name);
+      return [a, held_since = std::chrono::steady_clock::now(), was_pressed = false]
+          (const UnitreeJoystick& joy) mutable -> bool {
+        const KeySnapshot kb = GetKey(joy, a.name);
+        const auto now = std::chrono::steady_clock::now();
+        if (!kb.pressed || !was_pressed || kb.on_pressed) held_since = now;
+        was_pressed = kb.pressed;
+        const double held = kb.pressed_time >= 0.0 ? kb.pressed_time :
+          std::chrono::duration<double>(now - held_since).count();
         switch (a.field) {
           case Field::kPressed:     return kb.pressed;
           case Field::kOnPressed:   return kb.on_pressed;
           case Field::kOnReleased:  return kb.on_released;
-          case Field::kHoldTimeGE:  return kb.pressed && (kb.pressed_time >= a.hold_seconds);
+          case Field::kHoldTimeGE:  return kb.pressed && (held >= a.hold_seconds);
         }
         return false;
       };

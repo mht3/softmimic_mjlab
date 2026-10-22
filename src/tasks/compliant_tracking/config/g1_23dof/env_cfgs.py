@@ -1,14 +1,15 @@
 """Unitree G1_23Dof flat compliant tracking environment configurations."""
 
 from src.assets.robots.unitree_g1.g1_23dof_constants import (
-  G1_23DOF_ACTION_SCALE,
   get_g1_23dof_robot_cfg,
 )
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.envs.mdp.actions import JointPositionActionCfg
-from mjlab.managers.observation_manager import ObservationGroupCfg
+from mjlab.managers.observation_manager import ObservationGroupCfg, ObservationTermCfg
 from mjlab.sensor import ContactMatch, ContactSensorCfg
+from mjlab.utils.noise import UniformNoiseCfg as Unoise
 
+import src.tasks.compliant_tracking.mdp as mdp
 from src.tasks.compliant_tracking.mdp import CompliantMotionCommandCfg
 from src.tasks.compliant_tracking.tracking_env_cfg import (
   make_compliant_tracking_env_cfg,
@@ -18,14 +19,22 @@ from src.tasks.static_balance.mdp.push_control_command import PushControlCommand
 
 
 def unitree_g1_23dof_flat_compliant_tracking_env_cfg(
-  has_state_estimation: bool = True,
+  stand_deployable: bool = False,
   play: bool = False,
   history_length: int = 3,
 ) -> ManagerBasedRlEnvCfg:
-  """Create Unitree G1_23Dof flat terrain compliant tracking configuration."""
+  """Create Unitree G1_23Dof flat terrain compliant tracking configuration.
+
+  Args:
+    stand_deployable: Retained registration flag. Stand and motion tasks both
+      use the released reference-conditioned actor; old231-input checkpoints
+      require their archived configuration and are incompatible with this task.
+    play: Interactive play-mode overrides.
+    history_length: Frames stacked into every observation term.
+  """
   cfg = make_compliant_tracking_env_cfg(history_length=history_length)
 
-  cfg.scene.entities = {"robot": get_g1_23dof_robot_cfg()}
+  cfg.scene.entities = {"robot": get_g1_23dof_robot_cfg(gains="softmimic")}
 
   # No self-collision sensor: the self-collision penalty is disabled to match
   # SoftMimic's reward set.
@@ -40,29 +49,32 @@ def unitree_g1_23dof_flat_compliant_tracking_env_cfg(
     fields=("found", "force"),
     reduce="netforce",
     num_slots=1,
+    history_length=3,
   )
   cfg.scene.sensors = (feet_ground_cfg,)
 
   joint_pos_action = cfg.actions["joint_pos"]
   assert isinstance(joint_pos_action, JointPositionActionCfg)
-  joint_pos_action.scale = G1_23DOF_ACTION_SCALE
+  # SoftMimic uses a uniform 0.5 action scale around the default pose.
+  joint_pos_action.scale = 0.5
 
   motion_cmd = cfg.commands["motion"]
   assert isinstance(motion_cmd, CompliantMotionCommandCfg)
-  motion_cmd.anchor_body_name = "torso_link"
+  motion_cmd.require_nominal_reference = True
+  motion_cmd.anchor_body_name = "pelvis"
   motion_cmd.body_names = (
     "pelvis",
-    "left_hip_roll_link",
+    "left_hip_yaw_link",
     "left_knee_link",
     "left_ankle_roll_link",
-    "right_hip_roll_link",
+    "right_hip_yaw_link",
     "right_knee_link",
     "right_ankle_roll_link",
     "torso_link",
-    "left_shoulder_roll_link",
+    "left_shoulder_yaw_link",
     "left_elbow_link",
     "left_wrist_roll_rubber_hand",
-    "right_shoulder_roll_link",
+    "right_shoulder_yaw_link",
     "right_elbow_link",
     "right_wrist_roll_rubber_hand",
   )
@@ -73,27 +85,11 @@ def unitree_g1_23dof_flat_compliant_tracking_env_cfg(
   cfg.events["base_com"].params["asset_cfg"].body_names = ("torso_link",)
   cfg.events["payload_mass"].params["asset_cfg"].body_names = ("torso_link",)
 
-  cfg.terminations["ee_body_pos"].params["body_names"] = (
-    "left_ankle_roll_link",
-    "right_ankle_roll_link",
-    "left_wrist_roll_rubber_hand",
-    "right_wrist_roll_rubber_hand",
-  )
-
   cfg.viewer.body_name = "torso_link"
 
-  # Modify observations if we don't have state estimation.
-  if not has_state_estimation:
-    new_actor_terms = {
-      k: v
-      for k, v in cfg.observations["actor"].terms.items()
-      if k not in ["motion_anchor_pos_b", "base_lin_vel"]
-    }
-    cfg.observations["actor"] = ObservationGroupCfg(
-      terms=new_actor_terms,
-      concatenate_terms=True,
-      enable_corruption=True,
-    )
+  # Stand uses the same reference-conditioned327-input actor as the release.
+  # stand_deployable is retained for task-registration API compatibility; it
+  # no longer selects the former231-input ablation.
 
   # Apply play mode overrides.
   if play:

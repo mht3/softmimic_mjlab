@@ -1,277 +1,61 @@
-# SoftMimic Mjlab
+# Compliant Humanoid · Unitree G1 23DOF
 
+A SoftMimic port to mjlab with compliant standing, an ARDY motion editor, and a browser physics demo.
 
-## Overview
-Custom implementation of [SoftMimic](https://github.com/Improbable-AI/softmimic) using mjlab in place of IsaacLab to make setup, training, and deployment simpler. Currently supports compliant motion generation and learning for the Unitree G1 robot (both 29 and 23 dof).
-
-Feel free to open a PR for any issues. Trained using CUDA 12.9 and mujoco 3.8.1 on an NVIDIA RTX 5090 GPU. Real world deployment has been tested on the Unitree G1 23dof only.
-
-
-<div align="center">
-
-| <div align="center">  MuJoCo </div>                                                                                                                                           | <div align="center"> Physical </div>                                                                                                                                               |
-|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| <div style="width:250px; height:150px; overflow:hidden;"><img src="doc/gif/g1-velocity.gif" style="width:100%; height:100%; object-fit:cover; object-position:center;"></div> | <div style="width:250px; height:150px; overflow:hidden;"><img src="doc/gif/g1-velocity-real.gif" style="width:100%; height:100%; object-fit:cover; object-position:center;"></div> |
-
-</div>
-
-
-## Installation and Configuration
-
-Please refer to [setup.md](doc/setup_en.md) for installation and configuration steps.
-
-
-## Process Overview
-
-The basic workflow for using reinforcement learning to achieve motion control is:
-
-`Train` → `Play` → `Sim2Real`
-
-- **Train**: The agent interacts with the MuJoCo simulation and optimizes policies through reward maximization.
-- **Play**: Replay trained policies to verify expected behavior.
-- **Sim2Real**: Deploy trained policies to physical Unitree robots for real-world execution.
-
-
-## Usage Guide
-
-### 1. Velocity Tracking Training
-
-Run the following command to train a velocity tracking policy:
+## Run the included policy demo
 
 ```bash
-python scripts/train.py Unitree-G1-23Dof-Flat --env.scene.num-envs=4096
+git clone https://github.com/mht3/softmimic_mjlab.git
+cd softmimic_mjlab
+python3 -m pip install numpy pyyaml onnx
+python3 demos/sonic_web/prepare.py --reference datasets/streamer/stand.csv \
+  --deploy demos/policies/stand_9000/params/deploy.yaml \
+  --policy demos/policies/stand_9000/exported/policy.onnx
+python3 demos/sonic_web/serve.py --port 8088
 ```
 
-Multi-GPU Training: Scale to multiple GPUs using --gpu-ids:
-
-```bash
-python scripts/train.py Unitree-G1-23Dof-Flat \
-  --gpu-ids 0 1 \
-  --env.scene.num-envs=4096
-```
-
-- The first argument (e.g., Unitree-G1-23Dof-Flat) specifies the training task.
-Available velocity tracking tasks:
-  - Unitree-G1-Flat
-  - Unitree-G1-23Dof-Flat
-
-> [!NOTE]
-> For more details, refer to the mjlab documentation:
-> [mjlab documentation](https://mujocolab.github.io/mjlab/index.html).
-
-### 2. Motion Imitation Training
-
-Train a Unitree G1 to mimic reference motion sequences.
-
-<div style="margin-left: 20px;">
-
-#### 2.1 Prepare Motion Files
-
-Prepare csv motion files in mjlab/motions/g1/ and convert them to npz format:
-
-```bash
-python scripts/csv_to_npz.py \
---input-file src/assets/motions/g1/dance1_subject2.csv \
---output-name dance1_subject2.npz \
---input-fps 30 \
---output-fps 50 \
---robot g1 # g1 or g1_23dof
-```
-
-**npz files will be stored at:**：`src/motions/g1/...`
-
-#### 2.2 Training
-
-After generating the NPZ file, launch imitation training:
-
-```bash
-python scripts/train.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src/assets/motions/g1/dance1_subject2.npz --env.scene.num-envs=4096
-```
-
-Available tasks:
-  - Unitree-G1-Tracking-No-State-Estimation
-  - Unitree-G1-23Dof-Tracking-No-State-Estimation
-
-</div>
-
-> [!NOTE]
-> For detailed motion imitation instructions, refer to the BeyondMimic documentation:
-> [BeyondMimic documentation](https://github.com/HybridRobotics/whole_body_tracking/blob/main/README.md#motion-preprocessing--registry-setup).
-
-#### Parameter Description
-- `--env.scene`: simulation scene configuration (e.g., num_envs, dt, ground type, gravity, disturbances)
-- `--env.observations`: observation space configuration (e.g., joint state, IMU, commands, etc.)
-- `--env.rewards`: reward terms used for policy optimization
-- `--env.commands`: task commands (e.g., velocity, pose, or motion targets)
-- `--env.terminations`: termination conditions for each episode
-- `--agent.seed`: random seed for reproducibility
-- `--agent.resume`: resume from the last saved checkpoint when enabled
-- `--agent.policy`: policy network architecture configuration
-- `--agent.algorithm`: reinforcement learning algorithm configuration (PPO, hyperparameters, etc.)
-
-**Training results are stored at**：`logs/rsl_rl/<robot>_(velocity | tracking)/<date_time>/model_<iteration>.pt`
-
-### 3. Compliant Motion Tracking (SoftMimic)
-
-Train a compliant whole-body policy on SoftMimic augmented motions (Unitree G1 23dof).
-
-<div style="margin-left: 20px;">
-
-#### 3.1 Generate the augmented motion datasets
-
-The pipeline has three stages: (1) `generate_all.sh` runs the mink IK solver over the
-reference motion CSVs to produce 29dof augmented CSVs under
-`compliant_motion_augmentation/release_examples/<mode>/<task>/`; (2)
-`scripts/csv_29dof_to_23dof.py` drops the 6 unused joints; (3)
-`scripts/compliant_csv_to_npz.py` replays the adapted motion through MuJoCo to produce
-the training NPZs.
-
-The reference motion CSVs (`stand.csv`, `walk.csv`, …) live in the sibling `softmimic`
-repo, **not** in this repo. `generate_all.sh` resolves them relative to itself
-(`../../softmimic/datasets/motions_csv`); if your layout differs, point it there
-explicitly:
-
-```bash
-# Stage 1: 29dof augmented CSVs (needs `mink`; ~5 min for stand+walk on a GPU box).
-export SOFTMIMIC_MOTIONS_DIR=/path/to/softmimic/datasets/motions_csv   # optional override
-cd compliant_motion_augmentation && bash generate_all.sh && cd ..
-```
-
-Then convert each task to 23dof and to training NPZs (shown for `stand` and `walk`):
-
-```bash
-# Stages 2 + 3.
-for task in stand walk; do
-  for mode in forcefield collision-emulator zero-wrench; do
-    python scripts/csv_29dof_to_23dof.py \
-      --input-dir compliant_motion_augmentation/release_examples/$mode/$task \
-      --output-dir src/assets/compliant_motions_csv/$task/$mode
-  done
-  python scripts/compliant_csv_to_npz.py \
-    --input-dir src/assets/compliant_motions_csv/$task \
-    --output-dir src/assets/compliant_motions/$task
-done
-```
-
-#### 3.2 Training
-
-```bash
-bash train_configs/compliance/stand.sh    # or walk.sh
-```
-
-#### 3.3 Visualize a trained policy
-
-```bash
-python scripts/play.py Unitree-G1-23Dof-Compliant-Tracking-No-State-Estimation \
-  --motion_file=src/assets/compliant_motions/stand \
-  --checkpoint_file=logs/rsl_rl/g1_23dof_compliant_tracking/2026-xx-xx_xx-xx-xx/model_xx.pt
-```
-
-For real deployment, copy the run's `exported/policy.onnx` + `params/deploy.yaml` and a nominal motion NPZ (e.g. `src/assets/compliant_motions/stand/zero-wrench/stand_augmented_mink_001.npz`) into `deploy/robots/g1_23dof/config/policy/compliant_mimic/stand`, then deploy as in Section 5. The commanded stiffness is set per-policy in `deploy/robots/g1_23dof/config/config.yaml` (`desired_stiffness`, `desired_rotational_stiffness`) and can be adjusted online with the d-pad (up/down: translational, left/right: rotational).
-
-</div>
-
-### 4. Simulation Validation
-
-To visualize policy behavior in MuJoCo:
-
-Velocity tracking:
-```bash
-python scripts/play.py Unitree-G1-23Dof-Flat --viewer viser --checkpoint_file=logs/rsl_rl/g1_23dof_velocity/2026-xx-xx_xx-xx-xx/model_xx.pt
-```
-
-Motion imitation:
-```bash
-python scripts/play.py Unitree-G1-Tracking-No-State-Estimation --motion_file=src/assets/motions/g1/dance1_subject2.npz --checkpoint_file=logs/rsl_rl/g1_tracking/2026-xx-xx_xx-xx-xx/model_xx.pt
-```
-
-**Note**：
-
-- During training, policy.onnx and policy.onnx.data are also exported for deployment onto physical robots.
-
-
-### 5. Real Deployment
-
-Before deployment, install the required communication tools:
-- [cyclonedds](https://github.com/eclipse-cyclonedds/cyclonedds.git)
-- [unitree_sdk2](https://github.com/unitreerobotics/unitree_sdk2.git)
-
-<div style="margin-left: 20px;">
-
-#### 5.1 Power On the Robot
-Start the robot in suspended state and wait until it enters `zero-torque` mode.
-
-#### 5.2 Enable Debug Mode
-While in `zero-torque` mode, press `L2 + R2` on the controller. The robot will enter `debug mode` with joint damping enabled.
-
-#### 5.3 Connect to the Robot
-Connect your PC to the robot via Ethernet. Configure the network as:
-- Address：`192.168.123.222`
-- Netmask：`255.255.255.0`
-
-Use `ifconfig` to determine the Ethernet device name for deployment.
-
-#### 5.4 Compilation
-
-Example: Unitree G1 velocity control.
-Place `policy.onnx` and `policy.onnx.data` into: `deploy/robots/g1/config/policy/velocity/v0/exported`.
-Then compile:
-
-```bash
-cd deploy/robots/g1
-mkdir build && cd build
-cmake .. && make
-```
-
-#### 5.5 Deployment
-
-## 5.5.1 Simulation Deployment
-
-Before deploying on the real robot, it is recommended to perform simulation deployment using [unitree_mujoco](https://github.com/unitreerobotics/unitree_mujoco)
-to prevent abnormal behaviors on the physical robot. This framework has already integrated it.
-
-Build unitree_mujoco：
-
-```bash
-cd simulate
-mkdir build && cd build
-cmake .. && make -j8
-```
-
-Launch the simulator (note that a gamepad must be connected):
-
-```bash
-./simulate/build/unitree_mujoco
-```
-
-You can select the corresponding robot in `simulate/config`
-
-Launch the simulation control program:
-
-```bash
-cd deploy/robots/g1/build
-./g1_ctrl --network=lo
-```
-
-## 5.5.2 Real-Robot Deployment
-
-Launch the control program on the real robot:
-
-```bash
-cd deploy/robots/g1/build
-./g1_ctrl --network=enp5s0
-```
-
-**Arguments**：
-- `network`: The network interface used to connect to the robot. Use `lo` for simulation deployment, and `enp5s0` for the real robot(You can check it using the `ifconfig` command) 
-
-
-## Acknowledgements
-
-This project would not be possible without the contributions of the following repositories:
-
-- [mjlab](https://github.com/mujocolab/mjlab.git): training and execution framework
-- [Unitree RL Mjlab Repository](https://github.com/unitreerobotics/unitree_rl_mjlab.git): adaptation for Unitree robots
-- [SoftMimic](https://github.com/Improbable-AI/softmimic): IsaacLab implementation for SoftMimic RL sim, training, and deployment.
-- [Mink](https://github.com/kevinzakka/mink): Inverse kinematics solver in Mujoco
-- [RSL-RL](https://github.com/leggedrobotics/rsl_rl): Policy training framework.
+Open **[Compliant Humanoid](http://127.0.0.1:8088)** in a modern desktop browser. No training environment or CUDA is required: the command rebuilds viewer assets from the included ONNX, source meshes and standing CSV. Enable **Trained ONNX policy**, then press **Play**. Drag the robot to apply forces; reset or scrub the fixed reference below. The cyan ghost shows the nominal pose.
+
+The included model is the **iteration-9000 intermediate checkpoint**, not the final 20k policy. Its PyTorch/ONNX and browser/C++ interface checks pass; these do not certify balance, compliance performance or hardware safety. See the [model record](demos/policies/stand_9000/README.md).
+
+![Compliant Humanoid physics player](doc/images/policy_player.png)
+
+## Create a reference → train → deploy
+
+Only the small `datasets/streamer/stand.csv` input is versioned. Generated IK CSV/NPZ pairs, prepared references, audits, staging/backup directories and legacy motion libraries are local and ignored. Recreate the supported dataset with step 2; its complete audit runs before installation. Generated viewer assets are also ignored and rebuilt by the quickstart above. The published iteration-9000 ONNX and matching deployment configuration remain included.
+
+1. Follow [training setup](doc/setup_en.md) and activate `unitree_rl_mjlab`. For text generation, also follow [ARDY setup](demos/ardy_web/SETUP.md), then run:
+   ```bash
+   bash demos/ardy_web/run.sh
+   ```
+   Open [the motion streamer](http://127.0.0.1:8089). Generate, arrange, trim and blend motions; **Save CSV** exports the edited 23DOF trajectory. Root/full-body/hand/foot goals and circle, mouse-waypoint and skill-blending plans are available under **Generation plan**. For the supported standing task, use **+ Standing still reference** and save `datasets/streamer/stand.csv`.
+2. Generate and audit all 85 compliant standing trajectories on CPU:
+   ```bash
+   CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 \
+     python scripts/generate_standing_from_csv.py \
+     --input datasets/streamer/stand.csv --name streamer_stand
+   ```
+3. Train a fresh 20,000-iteration policy; online W&B project: **g1_compliance**:
+   ```bash
+   python scripts/check_compliant_dataset_ready.py src/assets/compliant_motions/g1_23dof/streamer_stand
+   bash train_configs/compliance/streamer_stand.sh
+   ```
+4. Follow [export and simulation](WORKFLOW.md#4-package-and-visualize-the-trained-policy) to package the matching ONNX, deployment YAML and reference, then install them into the browser demo. Moving reference files require a motion-specific tracker; the current training/deployment path supports constant standing.
+5. After simulation evaluation, follow [real-robot deployment](deploy/README.md) and the [matched bundle instructions](WORKFLOW.md#5-prepare-real-robot-deployment) for the 23DOF C++ controller:
+   ```bash
+   ./deploy/robots/g1_23dof/build/g1_ctrl --network=YOUR_ROBOT_NETWORK_INTERFACE
+   ```
+
+[Full reproducible workflow](WORKFLOW.md) · [Motion editor controls](demos/ardy_web/README.md) · [Policy player](demos/sonic_web/README.md)
+
+For a remote workstation: `ssh -N -L 8088:127.0.0.1:8088 -L 8089:127.0.0.1:8089 USER@WORKSTATION`.
+
+## Credits
+
+- [SoftMimic](https://github.com/Improbable-AI/softmimic): compliant augmentation and policy learning.
+- [ARDY](https://github.com/nv-tlabs/ardy): pretrained text/constraint-conditioned motion generation. [Paper and examples](https://research.nvidia.com/labs/sil/projects/ardy/).
+- [unitree_rl_mjlab](https://github.com/unitreerobotics/unitree_rl_mjlab): training and robot deployment foundation.
+- [GEAR-SONIC](https://nvlabs.github.io/GEAR-SONIC/): original Three.js/MuJoCo-WASM [demo source](https://nvlabs.github.io/GEAR-SONIC/demo.html), adapted for both viewers. [Source provenance](demos/sonic_web/upstream_manifest.json).
+- [mjlab](https://github.com/mujocolab/mjlab), [Mink](https://github.com/kevinzakka/mink), and [RSL-RL](https://github.com/leggedrobotics/rsl_rl): simulation, IK and RL infrastructure.
+
+Please cite the upstream papers when using this work. Upstream notices remain with their files. This is a research adaptation, not an official release from the cited projects.

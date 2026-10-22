@@ -3,6 +3,8 @@ from typing import Dict, Tuple
 import mujoco as mj
 import numpy as np
 
+from .collision_checks import self_collision_pairs
+
 from .constants import (
     FOOT_NAMES,
     IK_CHECK_MAX_COM_TRACKING_ERROR,
@@ -54,7 +56,9 @@ def is_ik_solution_feasible(
 ) -> Tuple[bool, Dict[str, float]]:
     """Check if the IK solution stays within physical and tracking limits."""
     violations: Dict[str, float] = {}
-    is_feasible = True
+    collisions = self_collision_pairs(ik_data.model, ik_data)
+    violations["self_penetration_m"] = max(collisions.values(), default=0.)
+    is_feasible = not collisions
 
     force_mag = np.linalg.norm(force_ext)
     violations["force_magnitude"] = force_mag

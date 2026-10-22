@@ -18,7 +18,7 @@ def unitree_g1_23dof_compliant_tracking_ppo_runner_cfg() -> RslRlOnPolicyRunnerC
     actor=RslRlModelCfg(
       hidden_dims=(512, 512, 256, 128),
       activation="elu",
-      obs_normalization=True,
+      obs_normalization=False,
       distribution_cfg={
         "class_name": "GaussianDistribution",
         "init_std": 1.0,
@@ -28,7 +28,7 @@ def unitree_g1_23dof_compliant_tracking_ppo_runner_cfg() -> RslRlOnPolicyRunnerC
     critic=RslRlModelCfg(
       hidden_dims=(512, 512, 512, 512),
       activation="elu",
-      obs_normalization=True,
+      obs_normalization=False,
     ),
     algorithm=RslRlPpoAlgorithmCfg(
       value_loss_coef=1.0,
@@ -45,8 +45,9 @@ def unitree_g1_23dof_compliant_tracking_ppo_runner_cfg() -> RslRlOnPolicyRunnerC
       max_grad_norm=1.0,
     ),
     experiment_name="g1_23dof_compliant_tracking",
-    wandb_project="mjlab_tracking",
+    logger="wandb",
+    wandb_project="g1_compliance",
     save_interval=500,
     num_steps_per_env=24,
-    max_iterations=30001,
+    max_iterations=100000,
   )
