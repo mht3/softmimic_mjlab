@@ -52,10 +52,10 @@ For a remote workstation: `ssh -N -L 8088:127.0.0.1:8088 -L 8089:127.0.0.1:8089 
 
 ## Credits
 
+Thanks to the following papers which helped make this repo:
+
 - [SoftMimic](https://github.com/Improbable-AI/softmimic): compliant augmentation and policy learning.
 - [ARDY](https://github.com/nv-tlabs/ardy): pretrained text/constraint-conditioned motion generation. [Paper and examples](https://research.nvidia.com/labs/sil/projects/ardy/).
 - [unitree_rl_mjlab](https://github.com/unitreerobotics/unitree_rl_mjlab): training and robot deployment foundation.
 - [GEAR-SONIC](https://nvlabs.github.io/GEAR-SONIC/): original Three.js/MuJoCo-WASM [demo source](https://nvlabs.github.io/GEAR-SONIC/demo.html), adapted for both viewers. [Source provenance](demos/sonic_web/upstream_manifest.json).
 - [mjlab](https://github.com/mujocolab/mjlab), [Mink](https://github.com/kevinzakka/mink), and [RSL-RL](https://github.com/leggedrobotics/rsl_rl): simulation, IK and RL infrastructure.
-
-Please cite the upstream papers when using this work. Upstream notices remain with their files. This is a research adaptation, not an official release from the cited projects.
