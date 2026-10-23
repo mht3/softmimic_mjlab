@@ -32,6 +32,8 @@ class G1_Mink_IK_Solver:
         torso_orientation_cost: float = 0.0,
         waist_cost: float = 0.01,
         knee_cost: float = 0.01,
+        max_joint_velocity: Optional[float] = None,
+        max_wrist_velocity: Optional[float] = None,
     ):
         if mink is None:
             raise ImportError("The 'mink' library is required for G1_Mink_IK_Solver.")
@@ -150,10 +152,16 @@ class G1_Mink_IK_Solver:
             for i in range(self.model.njnt)
             if self.model.jnt_type[i] != mujoco.mjtJoint.mjJNT_FREE
         ]
-        velocity_limits = {name: constants.MAX_IK_JOINT_VEL for name in joint_names}
+        maximum = constants.MAX_IK_JOINT_VEL if max_joint_velocity is None else max_joint_velocity
+        wrist_maximum = maximum if max_wrist_velocity is None else max_wrist_velocity
+        if not all(np.isfinite(v) and 0 < v <= constants.MAX_IK_JOINT_VEL for v in (maximum, wrist_maximum)):
+            raise ValueError("IK speed bounds must be positive and cannot exceed the original bound")
+        velocity_limits = {name: min(maximum, wrist_maximum) if 'wrist' in name else maximum for name in joint_names}
+        self.joint_velocity_limits = np.array([velocity_limits[self.model.joint(i).name]
+            for i in range(self.model.njnt) if self.model.jnt_qposadr[i] in self.actuated_qpos_indices])
         self.velocity_limit = mink.VelocityLimit(self.model, velocity_limits)
         self.release_velocity_limit = mink.VelocityLimit(
-            self.model, {name: constants.MAX_RELEASE_JOINT_VEL for name in joint_names})
+            self.model, {name: min(constants.MAX_RELEASE_JOINT_VEL, velocity_limits[name]) for name in joint_names})
         collision_geoms = [i for i in range(self.model.ngeom)
                            if self.model.geom_bodyid[i] > 0
                            and (self.model.geom_contype[i] or self.model.geom_conaffinity[i])]

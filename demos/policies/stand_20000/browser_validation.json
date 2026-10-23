@@ -1,0 +1,11 @@
+{
+  "checkpoint_iteration": 19999,
+  "rollout_seconds": 4.0,
+  "remained_upright": true,
+  "reset_verified": true,
+  "final_policy_enabled": false,
+  "final_physics_enabled": false,
+  "csv_upload_present": false,
+  "actuation": "implicit_pd",
+  "limitations": "Short unforced browser smoke check; not arbitrary-load or hardware validation."
+}

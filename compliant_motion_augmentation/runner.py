@@ -115,6 +115,8 @@ class SimulationRunner:
             self.config.com_cost_z_factor,
             self.config.upper_joint_cost,
             self.config.torso_orientation_cost,
+            max_joint_velocity=self.config.max_joint_velocity,
+            max_wrist_velocity=self.config.max_wrist_velocity,
         )
         if self.ik_solver.motion_lib:
             self.motion_duration = self.ik_solver.motion_lib.get_max_times(torch.tensor(0)).item()

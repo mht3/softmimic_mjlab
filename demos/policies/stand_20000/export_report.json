@@ -1,0 +1,11 @@
+{
+  "iteration": 19999,
+  "checkpoint_name": "model_19999.pt",
+  "checkpoint_sha256": "dcd5f1046dc055597786f1fef1969bd705faf8e43501061747865483b2abd0f3",
+  "onnx_sha256": "a8a8f767c32d18db02a4b44f05e8b91abaad93d703b8cfc801be365f41a6a28f",
+  "obs_normalization": false,
+  "parity_samples": 32,
+  "max_abs_action_error": 3.0517578125e-05,
+  "device": "cpu",
+  "behavior_validated": false
+}

@@ -4,6 +4,13 @@ export function validateReference(m,c=null){
  for(const [key,width] of [['root_pos',3],['root_quat',4],['joint_pos',23]])if(m[key]?.length!==m.frames||m[key].some(row=>row.length!==width||!row.every(Number.isFinite)))throw Error(`Invalid reference ${key}`);
  if(m.root_quat.some(q=>Math.abs(Math.hypot(...q)-1)>1e-5))throw Error('Reference quaternion is not normalized.');
  if(!c)return;
+ if(c.reference_mode==='nominal_motion'){
+  if(m.nominal_reference_version!==1 || m.fps!==50 || !m.channels)throw Error('Dynamic policy requires a prepared nominal NPZ, including velocity and contact channels.');
+  for(const [name,term] of Object.entries(c.observations))if(name.startsWith('reference_')){
+   const rows=m.channels[name];if(rows?.length!==m.frames||rows.some(row=>row.length!==term.scale.length||!row.every(Number.isFinite)))throw Error(`Invalid nominal channel ${name}`);
+  }
+  return;
+ }
  if(c.reference_mode!=='constant_nominal')throw Error('Unsupported policy reference mode.');
  const close=(a,b)=>a.length===b.length&&a.every((x,i)=>Math.abs(x-b[i])<1e-5);
  for(const key of ['root_pos','root_quat','joint_pos'])if(m[key].some(row=>!close(row,m[key][0])))throw Error('This policy requires its constant standing reference.');

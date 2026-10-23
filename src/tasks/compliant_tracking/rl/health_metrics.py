@@ -17,6 +17,8 @@ class ModeHealthMetrics:
         self.reward_sum = {m: torch.zeros((), device=device) for m in self.masks}
         self.error_sum = {m: torch.zeros((), device=device) for m in self.masks}
         self.steps = 0
+        self.window_completed = {m: 0. for m in self.masks}
+        self.window_timeouts = {m: 0. for m in self.masks}
 
     def update(self, rewards, dones, timeouts, body_error):
         done = dones.bool()
@@ -24,6 +26,8 @@ class ModeHealthMetrics:
         for mode, mask in self.masks.items():
             self.reward_sum[mode] += rewards[mask].mean().detach()
             self.error_sum[mode] += body_error[mask].mean().detach()
+            self.window_completed[mode] += (complete & mask).sum().detach()
+            self.window_timeouts[mode] += (complete & mask & timeouts.bool()).sum().detach()
             self.completed[mode] += (complete & mask).sum()
             self.timeouts[mode] += (complete & mask & timeouts.bool()).sum()
         self.seen_first_done |= done
@@ -41,6 +45,12 @@ class ModeHealthMetrics:
             result[prefix + '/full_episodes_since_resume'] = completed
             if completed:
                 result[prefix + '/timeout_fraction_since_resume'] = float(self.timeouts[mode]) / completed
+            count = float(self.window_completed[mode])
+            result[prefix + '/completed_episodes_this_update'] = count
+            if count:
+                result[prefix + '/timeout_fraction_this_update'] = float(self.window_timeouts[mode]) / count
+            self.window_completed[mode] = 0.
+            self.window_timeouts[mode] = 0.
             self.reward_sum[mode].zero_()
             self.error_sum[mode].zero_()
         self.steps = 0

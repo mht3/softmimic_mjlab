@@ -7,6 +7,9 @@ Install [Unitree SDK2](https://github.com/unitreerobotics/unitree_sdk2) and its 
 ```bash
 # From the repository root; compilation does not connect to the robot.
 cmake -S deploy/robots/g1_23dof -B deploy/robots/g1_23dof/build
+```
+
+```bash
 cmake --build deploy/robots/g1_23dof/build -j2
 ```
 

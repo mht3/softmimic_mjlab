@@ -51,6 +51,11 @@ public:
         _action.resize(total_action_dim(), 0.0f);
     }
 
+    void set_policy_action_clip(float limit) {
+        if (!std::isfinite(limit) || limit <= 0) throw std::runtime_error("Invalid policy action bound");
+        policy_action_clip_ = limit;
+    }
+
     void reset()
     {
         std::lock_guard<std::mutex> lock(action_mutex_);
@@ -84,6 +89,10 @@ public:
         std::lock_guard<std::mutex> lock(action_mutex_);
         if (action.size() != static_cast<size_t>(total_action_dim()))
             throw std::runtime_error("Policy action size does not match the configured joints.");
+        for (float &x : action) {
+            if (!std::isfinite(x)) throw std::runtime_error("Non-finite policy action");
+            if (policy_action_clip_ > 0) x = std::clamp(x, -policy_action_clip_, policy_action_clip_);
+        }
         _action = action;
         int idx = 0;
         for(auto & term : _terms)
@@ -115,6 +124,7 @@ public:
     ManagerBasedRLEnv* env;
 
 private:
+    float policy_action_clip_ = 0;
     std::mutex action_mutex_;
     void _prepare_terms()
     {

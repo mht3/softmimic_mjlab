@@ -61,6 +61,7 @@ def unitree_g1_23dof_flat_compliant_tracking_env_cfg(
   motion_cmd = cfg.commands["motion"]
   assert isinstance(motion_cmd, CompliantMotionCommandCfg)
   motion_cmd.require_nominal_reference = True
+  motion_cmd.deployment_reference_mode = "constant_nominal" if stand_deployable else "nominal_motion"
   motion_cmd.anchor_body_name = "pelvis"
   motion_cmd.body_names = (
     "pelvis",
@@ -129,4 +130,25 @@ def unitree_g1_23dof_flat_compliant_tracking_env_cfg(
 
     motion_cmd.sampling_mode = "start"
 
+  return cfg
+
+
+def unitree_g1_23dof_stable_stand_env_cfg(play: bool = False):
+  """Bounded standing ablation; intentionally differs from release parity."""
+  from mjlab.managers.termination_manager import TerminationTermCfg
+  from ...mdp.terminations import extreme_robot_state
+  cfg = unitree_g1_23dof_flat_compliant_tracking_env_cfg(stand_deployable=True, play=play)
+  command = cfg.commands["motion"]
+  command.mode_weights = {"forcefield": 1., "collision-emulator": 0., "zero-wrench": 1.}
+  command.max_force = 140.
+  command.max_torque = 10.
+  # Bound raw terms before scaling/history, with identical exported bounds.
+  bounds = {"base_ang_vel": 30., "joint_vel": 100., "joint_pos": 6.28318530718,
+            "projected_gravity": 1.01, "actions": 5.}
+  for group in cfg.observations.values():
+    for name, term in group.terms.items():
+      limit = bounds.get(name, 1000.)
+      term.clip = (-limit, limit)
+  cfg.terminations["extreme_robot_state"] = TerminationTermCfg(func=extreme_robot_state)
+  cfg.sim.nan_guard.enabled = True
   return cfg

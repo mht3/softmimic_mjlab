@@ -50,14 +50,17 @@ def test_export_rejects_changing_reference_and_accepts_float32_derivative_noise(
         _constant_nominal_reference(command)
 
 
-def test_actual_standing_actor_exports_13_terms_327_values_and_all_constants(tmp_path):
-    cfg = unitree_g1_23dof_flat_compliant_tracking_env_cfg(stand_deployable=True)
+@pytest.mark.parametrize("moving", [False, True])
+def test_actual_standing_actor_exports_13_terms_327_values_and_all_constants(tmp_path, moving):
+    cfg = unitree_g1_23dof_flat_compliant_tracking_env_cfg(stand_deployable=not moving)
     actor = cfg.observations["actor"].terms
     data = NS(default_joint_pos=torch.full((2, 23), -.2), joint_pos=torch.zeros(2, 23),
         default_joint_vel=torch.zeros(2, 23), joint_vel=torch.zeros(2, 23),
         root_link_ang_vel_b=torch.tensor([[1., 2., 3.]]).repeat(2, 1),
         projected_gravity_b=torch.tensor([[0., 0., -1.]]).repeat(2, 1))
     command = command_stub()
+    command.cfg.deployment_reference_mode = cfg.commands["motion"].deployment_reference_mode
+    if moving: command.motion.nominal_joint_pos[3,0] += .1
     env = NS(cfg=cfg, num_envs=2, step_dt=.02, scene={"robot": NS(data=data)},
         command_manager=NS(get_term=lambda _: command),
         action_manager=NS(_terms={}, action=torch.zeros(2, 23)),
@@ -72,9 +75,15 @@ def test_actual_standing_actor_exports_13_terms_327_values_and_all_constants(tmp
     assert all(v["history_length"] == 3 for v in exported["observations"].values())
     assert exported["observations"]["base_ang_vel"]["scale"] == [.25]*3
     assert exported["observations"]["joint_vel_rel"]["scale"] == [.05]*23
-    assert exported["reference_mode"] == "constant_nominal"
-    for name, value in _constant_nominal_reference(command).items():
-        assert exported["observations"][name]["params"] == {"value": value, "reference_mode": "constant_nominal"}
+    # The command stub mirrors the reference mode of the selected task.
+    if not moving:
+        assert exported["reference_mode"] == "constant_nominal"
+        for name, value in _constant_nominal_reference(command).items():
+            assert exported["observations"][name]["params"] == {"value": value, "reference_mode": "constant_nominal"}
+    else:
+        assert exported["reference_mode"] == "nominal_motion"
+        for name in expected_names[5:11]:
+            assert exported["observations"][name]["params"] == {"reference_mode": "nominal_motion"}
     # Unknown actor terms must fail export, never silently disappear at runtime.
     env.observation_manager.active_terms["actor"] = ["unsupported_input"]
     env.observation_manager._group_obs_term_cfgs["actor"] = [next(iter(actor.values()))]

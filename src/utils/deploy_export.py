@@ -114,7 +114,7 @@ def _obs_export_params(train_name: str, params: dict[str, Any]) -> dict[str, Any
     return out
 
 
-def export_deploy_cfg(env: ManagerBasedRlEnv, log_dir: Path) -> None:
+def export_deploy_cfg(env: ManagerBasedRlEnv, log_dir: Path, *, policy_action_clip: float | None = None) -> None:
     """Export deploy.yaml from a live training environment.
 
     The robot's EntityCfg must be a DeployEntityCfg carrying hardware constants
@@ -156,6 +156,11 @@ def export_deploy_cfg(env: ManagerBasedRlEnv, log_dir: Path) -> None:
             }
         }
     cfg["commands"] = commands
+    if policy_action_clip is not None:
+        import math
+        if not math.isfinite(policy_action_clip) or policy_action_clip <= 0:
+            raise ValueError("policy_action_clip must be finite and positive")
+        cfg["policy_action_clip"] = policy_action_clip
 
     # Actions
     cfg["actions"] = {}
@@ -192,8 +197,12 @@ def export_deploy_cfg(env: ManagerBasedRlEnv, log_dir: Path) -> None:
     cfg["observations"] = {}
     references = None
     if any(name in _REFERENCE_OBSERVATIONS for name in obs_names):
-        references = _constant_nominal_reference(env.command_manager.get_term("motion"))
-        cfg["reference_mode"] = "constant_nominal"
+        command = env.command_manager.get_term("motion")
+        cfg["reference_mode"] = getattr(command.cfg, "deployment_reference_mode", "constant_nominal")
+        if cfg["reference_mode"] == "constant_nominal":
+            references = _constant_nominal_reference(command)
+        elif cfg["reference_mode"] != "nominal_motion" or not command.motion.has_nominal_reference:
+            raise ValueError("Dynamic deployment requires complete nominal motion channels")
     observation_dim = 0
     for train_name, obs_cfg in zip(obs_names, obs_cfgs, strict=True):
         params = dict(obs_cfg.params)
@@ -209,11 +218,16 @@ def export_deploy_cfg(env: ManagerBasedRlEnv, log_dir: Path) -> None:
         if train_name in _REFERENCE_OBSERVATIONS:
             if params.get("command_name") != "motion" or not params.get("nominal", True):
                 raise ValueError(f"{train_name} must use the nominal motion reference")
-            constant = references[train_name]
-            expected = torch.tensor(constant, device=obs_sample.device, dtype=obs_sample.dtype)
-            if obs_dim != len(constant) or not torch.allclose(obs_sample, expected.expand_as(obs_sample), atol=1.e-5, rtol=0.):
-                raise ValueError(f"Training/deployment reference mismatch for {train_name}")
-            export_params = {"value": constant, "reference_mode": "constant_nominal"}
+            if references is not None:
+                constant = references[train_name]
+                expected = torch.tensor(constant, device=obs_sample.device, dtype=obs_sample.dtype)
+                if obs_dim != len(constant) or not torch.allclose(obs_sample, expected.expand_as(obs_sample), atol=1.e-5, rtol=0.):
+                    raise ValueError(f"Training/deployment reference mismatch for {train_name}")
+                export_params = {"value": constant, "reference_mode": "constant_nominal"}
+            else:
+                if not bool(torch.isfinite(obs_sample).all()):
+                    raise ValueError(f"Non-finite nominal channel {train_name}")
+                export_params = {"reference_mode": "nominal_motion"}
 
         scale = obs_cfg.scale
         if scale is None:

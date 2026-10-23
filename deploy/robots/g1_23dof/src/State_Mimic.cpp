@@ -1,4 +1,5 @@
 #include "State_Mimic.h"
+#include "isaaclab/envs/mdp/observations/nominal_motion.h"
 #include "unitree_articulation.h"
 #include "isaaclab/envs/mdp/observations/observations.h"
 #include "isaaclab/envs/mdp/actions/joint_actions.h"
@@ -143,10 +144,14 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
     spdlog::info("Desired stiffness: {:.1f} N/m, rotational: {:.2f} Nm/rad",
                  desired_stiffness.load(), desired_rotational_stiffness.load());
 
-    env = std::make_unique<isaaclab::ManagerBasedRLEnv>(
-        YAML::LoadFile(policy_dir / "params" / "deploy.yaml"),
-        articulation
-    );
+    auto deploy_cfg = YAML::LoadFile(policy_dir / "params" / "deploy.yaml");
+    std::function<std::vector<float>(const std::string&)> reference_provider;
+    if (deploy_cfg["reference_mode"] && deploy_cfg["reference_mode"].as<std::string>() == "nominal_motion") {
+        auto nominal = std::make_shared<isaaclab::NominalMotion>(motion_file.string());
+        if (nominal->frames != static_cast<size_t>(motion_->num_frames)) throw std::runtime_error("Nominal/playback frame mismatch");
+        reference_provider = [nominal, loader=motion_](const std::string& key) {return nominal->at(key, loader->frame);};
+    }
+    env = std::make_unique<isaaclab::ManagerBasedRLEnv>(deploy_cfg, articulation, reference_provider);
     env->alg = std::make_unique<isaaclab::OrtRunner>(policy_dir / "exported" / "policy.onnx");
 
     float limit_angle = 1.0f;

@@ -27,8 +27,8 @@ bash demos/ardy_web/setup.sh
 
 ```bash
 python demos/sonic_web/prepare.py --reference datasets/streamer/stand.csv \
-  --deploy demos/policies/stand_9000/params/deploy.yaml \
-  --policy demos/policies/stand_9000/exported/policy.onnx
+  --deploy demos/policies/stand_20000/params/deploy.yaml \
+  --policy demos/policies/stand_20000/exported/policy.onnx
 ```
 
 ```bash

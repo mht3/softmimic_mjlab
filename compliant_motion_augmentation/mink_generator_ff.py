@@ -132,7 +132,11 @@ def main():
         help="Name of the output video file.",
     )
 
+    parser.add_argument("--max_joint_velocity", type=float, default=None)
+    parser.add_argument("--max_wrist_velocity", type=float, default=None)
+    parser.add_argument("--workers",type=int,default=10)
     args = parser.parse_args()
+    if args.workers < 1: parser.error("--workers must be positive")
     if not os.path.exists(args.model_path):
         raise FileNotFoundError(args.model_path)
 
@@ -157,7 +161,7 @@ def main():
             ]
 
         if tasks:
-            num_workers = min(10, len(tasks))
+            num_workers = min(config.workers, len(tasks))
             print(
                 f"\n--- Starting parallel data generation for {len(tasks)} files using up to {num_workers} workers ---"
             )

@@ -22,8 +22,9 @@ class ManagerBasedRLEnv
 {
 public:
     // Constructor
-    ManagerBasedRLEnv(YAML::Node cfg, std::shared_ptr<Articulation> robot_)
-    :cfg(cfg), robot(std::move(robot_))
+    ManagerBasedRLEnv(YAML::Node cfg, std::shared_ptr<Articulation> robot_,
+        std::function<std::vector<float>(const std::string&)> nominal_provider = {})
+    :cfg(cfg), robot(std::move(robot_)), nominal_reference(std::move(nominal_provider))
     {
         // Parse configuration
         this->step_dt = cfg["step_dt"].as<float>();
@@ -44,6 +45,7 @@ public:
 
         // load managers
         action_manager = std::make_unique<ActionManager>(cfg["actions"], this);
+        if (cfg["policy_action_clip"]) action_manager->set_policy_action_clip(cfg["policy_action_clip"].as<float>());
         observation_manager = std::make_unique<ObservationManager>(cfg["observations"], this);
     }
 
@@ -68,6 +70,7 @@ public:
     float step_dt;
     
     YAML::Node cfg;
+    std::function<std::vector<float>(const std::string&)> nominal_reference;
 
     std::unique_ptr<ObservationManager> observation_manager;
     std::unique_ptr<ActionManager> action_manager;

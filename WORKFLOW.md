@@ -2,7 +2,7 @@
 
 Create a reference motion, generate compliant targets with inverse kinematics, train in mjlab, and evaluate the matched controller in simulation before deployment.
 
-This repository adapts SoftMimic to mjlab and the G1's 23 active joints. The reproducible example below trains **compliant standing with a fixed nominal reference**. The streamer can also save edited moving motions for future motion-specific training; the standing training/export/deployment path rejects those moving references. Saving a motion does not make it dynamically feasible or produce a trained controller.
+This repository adapts SoftMimic to mjlab and the G1's 23 active joints. The reproducible example below trains **compliant standing with a fixed nominal reference**. The generic motion task and both deployment adapters also support time-varying nominal references. The standing task deliberately rejects them because this example trains on a fixed nominal pose; see [moving-reference support](doc/STABILITY_AND_MOTION.md#moving-reference-support). Saving a motion does not make it dynamically feasible or produce a trained controller.
 
 ## 1. Set up and author a reference
 
@@ -45,29 +45,28 @@ ssh -N -L 8089:127.0.0.1:8089 -L 8088:127.0.0.1:8088 USER@WORKSTATION
 Run in the training conda environment, from the repository root:
 
 ```bash
-CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 \
-  python scripts/generate_standing_from_csv.py \
-  --input datasets/streamer/stand.csv --name streamer_stand
+python scripts/generate_standing_from_csv.py \
+  --input datasets/streamer/stand.csv --name streamer_stand_smooth --max-joint-velocity 3 --max-wrist-velocity 1.5 --workers 4
 ```
 
 The command validates the saved pose and named joint order, prepares a 30-second nominal reference at 30 Hz, and runs **direct 23DOF constrained IK**. It generates 40 forcefield, 40 collision-emulator and 5 zero-wrench trajectories, converts them to 50 Hz NPZs, and audits all 85 CSV/NPZ pairs. Joint limits, speed, feet, force/displacement consistency, collision samples, release recovery, array structure and source hashes must pass. No threshold is relaxed on failure.
 
 Only after success are the reference and dataset installed at:
 
-- `datasets/reference23/streamer_stand.csv` — nominal reference; 32 columns including foot contacts.
-- `src/assets/compliant_motions/g1_23dof/streamer_stand/` — compliant targets, `audit.json` and `generation.json`.
+- `datasets/reference23/streamer_stand_smooth.csv` — nominal reference; 32 columns including foot contacts.
+- `src/assets/compliant_motions/g1_23dof/streamer_stand_smooth/` — compliant targets, `audit.json` and `generation.json`.
 
 Existing datasets are preserved; choose another `--name` for a new version. Failed stages remain under `.streamer-*` for diagnosis. The command never starts training. To recheck the installed audit and hashes:
 
 ```bash
 python scripts/check_compliant_dataset_ready.py \
-  src/assets/compliant_motions/g1_23dof/streamer_stand
+  src/assets/compliant_motions/g1_23dof/streamer_stand_smooth
 ```
 
 ## 3. Train compliant standing
 
 ```bash
-bash train_configs/compliance/streamer_stand.sh
+bash train_configs/compliance/stand_stable.sh
 ```
 
 This script requires **all 85 audited files**, starts a fresh **20,000-iteration** run with 4,096 environments, and logs online to W&B project **`g1_compliance`**. Authenticate W&B in this environment beforehand. Run it when your GPU is available; it does not coordinate with another training process. For another dataset name, set `MOTION_FILE=src/assets/compliant_motions/g1_23dof/YOUR_NAME` before the command.
@@ -88,32 +87,25 @@ BUNDLE="$PWD/deploy/robots/g1_23dof/config/policy/streamer_stand"
 
 ```bash
 python demos/package_standing_policy.py --run "$RUN" --output "$BUNDLE" \
-  --reference datasets/reference23/streamer_stand.csv \
-  --dataset src/assets/compliant_motions/g1_23dof/streamer_stand
+  --reference datasets/reference23/streamer_stand_smooth.csv \
+  --dataset src/assets/compliant_motions/g1_23dof/streamer_stand_smooth
 ```
 
 ```bash
-CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 \
-  python demos/check_cpp_policy_contract.py --bundle "$BUNDLE"
+python demos/check_cpp_policy_contract.py --bundle "$BUNDLE"
 ```
 
 ```bash
-CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 \
-  python demos/sonic_web/test_policy_contract.py --deploy "$BUNDLE/params/deploy.yaml"
+python demos/sonic_web/test_policy_contract.py --deploy "$BUNDLE/params/deploy.yaml"
 ```
 
 If either check fails, stop before installing. These checks validate observation/action interfaces and normalization parity, not learned balance or compliance.
 
 ```bash
-python demos/sonic_web/prepare.py \
+python demos/sonic_web/serve.py --port 8088 \
   --reference "$BUNDLE/params/reference.csv" \
   --deploy "$BUNDLE/params/deploy.yaml" \
-  --policy "$BUNDLE/exported/policy.onnx" \
-  --stiffness 200 --rotational-stiffness 1
-```
-
-```bash
-python demos/sonic_web/serve.py --port 8088
+  --policy "$BUNDLE/exported/policy.onnx"
 ```
 
 Open **[Compliant Humanoid](http://127.0.0.1:8088)**. A required nominal reference appears in the fixed bottom timeline. The black/silver robot is the physics body; the translucent cyan ghost shows the reference beside it. Play/pause, seek, reset and playback speed remain available. Seeking resets the physical state to the selected reference pose; it does not reconstruct a previous rollout. Toggle the ghost offset to overlay the two robots.

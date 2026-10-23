@@ -52,10 +52,27 @@ public:
     {
         cnpy::npz_t npz_data = cnpy::npz_load(motion_file);
 
-        auto body_pos_w  = npz_data["body_pos_w"];   // [frame, body_id, 3]
-        auto body_quat_w = npz_data["body_quat_w"];  // [frame, body_id, 4]
-        auto joint_pos   = npz_data["joint_pos"];    // [frame, dof]
-        auto joint_vel   = npz_data["joint_vel"];    // [frame, dof]
+        auto body_pos_w  = npz_data.at("body_pos_w");   // [frame, body_id, 3]
+        auto body_quat_w = npz_data.at("body_quat_w");  // [frame, body_id, 4]
+        auto joint_pos   = npz_data.at("joint_pos");    // [frame, dof]
+        auto joint_vel   = npz_data.at("joint_vel");    // [frame, dof]
+
+        auto valid = [](const cnpy::NpyArray& a, size_t rank, size_t width) {
+            if (a.word_size != sizeof(float) || a.fortran_order || a.shape.size() != rank ||
+                a.shape[0] < 2 || a.shape.back() != width || (rank == 3 && a.shape[1] < 1))
+                throw std::runtime_error("Invalid motion array shape/type; prepare a 23DOF deployment NPZ");
+            for (size_t i=0; i<a.num_vals; ++i) if(!std::isfinite(a.data<float>()[i]))
+                throw std::runtime_error("Non-finite motion data");
+        };
+        valid(body_pos_w,3,3); valid(body_quat_w,3,4); valid(joint_pos,2,23); valid(joint_vel,2,23);
+        if(body_pos_w.shape[0]!=joint_pos.shape[0] || body_quat_w.shape[0]!=joint_pos.shape[0] || joint_vel.shape[0]!=joint_pos.shape[0])
+            throw std::runtime_error("Motion frame count mismatch");
+        if(npz_data.count("fps")) {
+            const auto& fps=npz_data.at("fps");
+            if(fps.num_vals!=1 || (fps.word_size!=4 && fps.word_size!=8)) throw std::runtime_error("Invalid motion fps");
+            double rate=fps.word_size==4 ? fps.data<float>()[0] : fps.data<double>()[0];
+            if(rate!=50.) throw std::runtime_error("Motion must be converted to 50 Hz");
+        }
 
         root_positions.clear();
         root_quaternions.clear();
@@ -99,6 +116,8 @@ public:
     {
         float phase = std::clamp(time, 0.0f, duration);
         float f = phase / dt;
+        // 50 Hz float accumulation must not lag by one frame near integer ticks.
+        if (std::abs(f - std::round(f)) < 1e-3f) f = std::round(f);
         frame = static_cast<int>(std::floor(f));
         frame = std::min(frame, num_frames - 1);
     }

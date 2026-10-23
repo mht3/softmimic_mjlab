@@ -23,6 +23,27 @@ def main():
         p.error('--deploy and --policy must be supplied together')
     motion=read_reference(args.reference,args.reference_fps)
     if args.deploy:validate_reference(motion,yaml.safe_load(args.deploy.read_text()))
+    # Reject a bad controller before changing any served asset.
+    if args.policy:
+        import onnx
+        c=yaml.safe_load(args.deploy.read_text())
+        expected={'base_ang_vel':3,'projected_gravity':3,'joint_pos_rel':23,'joint_vel_rel':23,'last_action':23,
+                  'reference_dof_pos':23,'reference_xy_vel':2,'reference_yaw_vel':1,'reference_root_height':1,
+                  'reference_gravity_vector':3,'reference_foot_contact':2,'desired_stiffness_log':1,'desired_rotational_stiffness_log':1}
+        if c.get('observation_dim')!=327 or c.get('step_dt')!=.02 or list(c['observations'])!=list(expected):raise ValueError('Unsupported policy observation contract')
+        for name,width in expected.items():
+            term=c['observations'][name]
+            if term['history_length']!=3 or len(term['scale'])!=width or not np.isfinite(term['scale']).all():raise ValueError(f'Invalid observation term {name}')
+        if c['joint_ids_map']!=[*range(13),15,16,17,18,19,22,23,24,25,26]:raise ValueError('Incompatible hardware joint order')
+        for name in ('default_joint_pos','stiffness','damping'):
+            if len(c[name])!=23 or not np.isfinite(c[name]).all():raise ValueError(f'Invalid {name}')
+        action=c['actions']['JointPositionAction']
+        if action['clip'] is not None or action['joint_ids'] is not None:raise ValueError('Unsupported action mapping')
+        for name in ('scale','offset'):
+            if len(action[name])!=23 or not np.isfinite(action[name]).all():raise ValueError('Invalid action scale/offset')
+        model=onnx.load(args.policy);onnx.checker.check_model(model)
+        dimensions=lambda x:[d.dim_value for d in x.type.tensor_type.shape.dim]
+        if len(model.graph.input)!=1 or len(model.graph.output)!=1 or dimensions(model.graph.input[0])!=[1,327] or dimensions(model.graph.output[0])!=[1,23]:raise ValueError('Incompatible ONNX dimensions')
     assets = HERE / 'assets'
     robot = assets / 'robot'
     (robot / 'meshes').mkdir(parents=True, exist_ok=True)
@@ -35,13 +56,21 @@ def main():
     assert len(joints) == 23
     if motion['joint_names'] is not None and motion['joint_names'] != [j.get('name') for j in joints]:
         raise ValueError('Reference named joint order differs from the robot')
+    deploy_cfg = yaml.safe_load(args.deploy.read_text()) if args.deploy else None
     effort = []
     actuators = ET.SubElement(root, 'actuator')
     for j in joints:
         name = j.attrib['name']
         limit = 139 if 'knee' in name else 50 if 'ankle' in name else 88 if ('hip' in name or 'waist' in name) else 25
         j.set('armature', '0.001' if 'wrist' in name else '0.01')
-        ET.SubElement(actuators, 'motor', name=name, joint=name, ctrllimited='true', ctrlrange=f'-{limit} {limit}')
+        if deploy_cfg:
+            i = len(effort)
+            kp, kd = deploy_cfg['stiffness'][i], deploy_cfg['damping'][i]
+            ET.SubElement(actuators, 'general', name=name, joint=name,
+                          gainprm=f'{kp}', biasprm=f'0 {-kp} {-kd}', biastype='affine',
+                          forcelimited='true', forcerange=f'-{limit} {limit}')
+        else:
+            ET.SubElement(actuators, 'motor', name=name, joint=name, ctrllimited='true', ctrlrange=f'-{limit} {limit}')
         effort.append(limit)
     # Same collision masks as get_g1_23dof_robot_cfg(gains='softmimic').
     for g in root.findall('.//worldbody//geom'):
@@ -56,11 +85,11 @@ def main():
     (assets/'motions').mkdir(exist_ok=True)
     (assets/'motions/stand.json').write_text(json.dumps(motion))
     (assets/'motions/index.json').write_text(json.dumps([dict(id='stand',display=motion['name'],frames=motion['frames'],fps=motion['fps'])]))
-    (assets/'robot/contract.json').write_text(json.dumps(dict(joint_names=[j.get('name') for j in joints],effort_limits=effort,step_dt=.02,substeps=4)))
+    (assets/'robot/contract.json').write_text(json.dumps(dict(joint_names=[j.get('name') for j in joints],effort_limits=effort,step_dt=.02,substeps=4,actuation='implicit_pd' if deploy_cfg else 'torque')))
     if args.policy:
         import onnx
         c = yaml.safe_load(args.deploy.read_text())
-        assert c.get('reference_mode') == 'constant_nominal' and c.get('observation_dim') == 327
+        assert c.get('reference_mode') in ('constant_nominal','nominal_motion') and c.get('observation_dim') == 327
         assert len(c['default_joint_pos']) == 23 and c['step_dt'] == .02
         assert c['joint_ids_map'] == [*range(13),15,16,17,18,19,22,23,24,25,26]
         model = onnx.load(args.policy); onnx.checker.check_model(model)
@@ -69,6 +98,7 @@ def main():
         assert len(model.graph.output)==1 and dim(model.graph.output[0])[-1]==23
         validate_reference(motion,c)
         c['effort_limits']=effort
+        c['actuation']='implicit_pd'
         c['stiffness_command']=args.stiffness; c['rotational_stiffness_command']=args.rotational_stiffness
         c['source_policy_sha256']=hashlib.sha256(args.policy.read_bytes()).hexdigest()
         c['source_policy']=str(args.policy)

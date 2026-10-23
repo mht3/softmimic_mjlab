@@ -8,8 +8,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parent/"sonic_web"))
 from reference import read_reference,validate_reference
 import numpy as np,onnx,yaml
 from onnx.external_data_helper import convert_model_from_external_data
-ROOT=Path(__file__).resolve().parents[2]
-REPO=ROOT/'softmimic_mjlab'
+REPO=Path(__file__).resolve().parents[1]
 EXPECTED=[*range(13),15,16,17,18,19,22,23,24,25,26]
 def main():
  p=argparse.ArgumentParser();p.add_argument('--run',type=Path,required=True);p.add_argument('--output',type=Path,required=True)

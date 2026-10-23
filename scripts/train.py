@@ -179,7 +179,7 @@ def run_train(task_id: str, cfg: TrainConfig, log_dir: Path) -> None:
     dump_yaml(log_dir / "params" / "env.yaml", env_cfg)
     dump_yaml(log_dir / "params" / "agent.yaml", agent_cfg)
     _write_params_training_scripts(log_dir)
-    export_deploy_cfg(base_env, log_dir)
+    export_deploy_cfg(base_env, log_dir, policy_action_clip=cfg.agent.clip_actions)
     if cfg.motion_file:
       dataset = Path(cfg.motion_file).resolve()
       if dataset.is_dir():

@@ -51,3 +51,11 @@ def unitree_g1_23dof_compliant_tracking_ppo_runner_cfg() -> RslRlOnPolicyRunnerC
     num_steps_per_env=24,
     max_iterations=100000,
   )
+
+
+def unitree_g1_23dof_stable_stand_ppo_runner_cfg():
+  cfg = unitree_g1_23dof_compliant_tracking_ppo_runner_cfg()
+  # Applied before physics AND action-history/action-rate reward computation.
+  cfg.clip_actions = 5.
+  cfg.max_iterations = 20000
+  return cfg

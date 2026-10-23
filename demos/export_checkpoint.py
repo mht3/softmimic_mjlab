@@ -20,6 +20,7 @@ def main():
     p.add_argument('--checkpoint', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--iteration', type=int, required=True)
+    p.add_argument('--final', action='store_true', help='Require the configured final training iteration')
     a = p.parse_args()
     if a.output.exists():
         p.error('Output must be a new directory.')
@@ -30,6 +31,8 @@ def main():
         raise ValueError(f"Checkpoint iteration {saved['iter']} != requested {a.iteration}")
     # The trusted local training config includes YAML tuple tags.
     cfg = yaml.load((checkpoint.parent/'params/agent.yaml').read_text(), Loader=yaml.FullLoader)
+    if a.final and a.iteration != cfg['max_iterations']-1:
+        raise ValueError('Final export must match configured max_iterations - 1')
     deploy = yaml.safe_load((checkpoint.parent/'params/deploy.yaml').read_text())
     if deploy['observation_dim'] != 327 or len(deploy['default_joint_pos']) != 23:
         raise ValueError('Expected the 327-input / 23-action standing contract')
@@ -52,8 +55,8 @@ def main():
     graph = onnx.load(target)
     onnx.helper.set_model_props(graph, {'checkpoint_iteration': str(a.iteration),
         'checkpoint_sha256': digest, 'robot': 'Unitree G1 23DOF',
-        'reference_mode': 'constant_nominal',
-        'training_status': 'intermediate checkpoint; training continues'})
+        'reference_mode': deploy['reference_mode'],
+        'training_status': 'completed training' if a.final else 'intermediate checkpoint; training continues'})
     onnx.checker.check_model(graph)
     onnx.save(graph, target)
     session = ReferenceEvaluator(str(target))

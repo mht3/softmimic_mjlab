@@ -1,14 +1,15 @@
-# Streamer → standing workflow verification (2026-10-22)
+# Workflow verification (2026-10-22)
 
-- Save CSV exercised in the browser with the fixed standing reference. The file uses 23 named joints, XYZW root quaternions and 100 Hz. Tests cover trims, quaternion round trip, aligned joins, malformed input and incompatible references.
-- Browser verified black/silver MJCF materials, fixed timeline, playback, physics fall with no controller, independent cyan ghost, and reset. Screenshots are under `doc/images/`.
-- Three CPU reference/import tests pass; four JavaScript test files pass (timeline, blend, CSV and drag forces).
-- Direct IK and converted all-frame audit pass for one file in each of the three modes, under `src/assets/compliant_motions/g1_23dof/.streamer-cltrsst7/verification_streamer_stand/audit.json`. The original verification process ended with SIGTERM after conversion of the first two modes; the remaining zero-wrench conversion and complete three-file audit were run separately. This is not the full 85-file generation or a training approval.
-- Training launcher tested with a stub replacing the trainer: full 85-file audited dataset accepted; 3-file verification rejected; arguments specify fresh 20k training and online W&B `g1_compliance`. No new training was launched.
-- Diagnostic bundle packaging, standing-only FSM and native C++ versus JavaScript parity passed. All 327 observations matched; maximum ONNX action difference 8.96e-8. Browser adapter also matched mjlab's actual quaternion/history utilities. Temporary diagnostic bundle: `/tmp/streamer-package-diagnostic-tbjyumpk/bundle`. It was not installed into viewer assets or hardware configuration.
-- Existing SoftMimic training was not restarted or modified. No GPU inference or hardware control was launched. The active player contains a reference only and awaits a completed trained policy.
+- Streamer CSV export preserves 23 named joints, XYZW root quaternions, frame rate, trims, world alignment and editor transitions. Timeline, blend, CSV and drag-force tests pass.
+- The new slower standing dataset passed the complete 85-pair audit: 76,670 CSV frames and 127,670 converted frames. No sampled self-penetration; all converted arrays finite. Original collision, foot, force/displacement and recovery gates remain unchanged. See [stability settings and audit limits](../doc/STABILITY_AND_MOTION.md).
+- A separate six-file dataset uses new forcefield seeds. The final baseline iteration-19999 policy completed all 12 deterministic 30-second evaluation episodes without early termination. Loaded tracking error remains higher than unforced standing; this is a small held-out check, not arbitrary-force validation.
+- The bounded, rebalanced training profile passed a CPU rollout smoke check. No new GPU training was started. It requires freshly audited 3 rad/s joint / 1.5 rad/s wrist references and logs to W&B `g1_compliance`.
+- 109 repository regression tests passed before the additional CSV/nominal-pair checks; the focused nominal suite then passed all three tests. The native 23DOF controller builds without opening hardware channels.
+- A synthetic moving-reference fixture passed all 327 C++/JavaScript observations, history/reset behavior, raw-action bounds and ONNX target comparisons; maximum action difference was 4.77e-6. This verifies the moving-reference adapter, not a trained walking controller.
+- Browser actuation now uses implicit PD with the exported gains/force limits. Native CPU MuJoCo comparison found much lower wrist velocity than the former explicit-PD integration. Browser and hardware behavior require separate evaluation.
+- Launch requires `--policy`, `--deploy` and `--reference`; CSV upload is removed. Missing files, incompatible pairs and mismatched CSV/nominal NPZ segments are rejected.
 
-The supported end-to-end deployment contract is constant standing. Moving edits can be exported, but require motion-specific task/export/deployment work; the standing pipeline rejects them. Geometry checks, software interface parity and learned physical behavior are separate validations.
+Generated IK data, audits and local diagnostic reports remain ignored. The published policy bundle contains its export and interface reports. No active hardware configuration was replaced and no robot controller was started.
 
 ## Native ARDY constraint authoring
 
@@ -19,8 +20,8 @@ The supported end-to-end deployment contract is constant standing. Moving edits 
 - Example plans reproduce the mechanisms in ARDY's published examples, using its native condition classes and history-aware generation; they are not the original demo's saved motions or its SONIC controller.
 - The 16-second side-step → jog → jump → stand test (seed 42, `../sonic23/ardy_motions/3598cd5d8f764bda824dccf7e0fd9618/`) passed its first 4.16-second prefix, then failed the 8.32-second retarget with `Retarget requires excessive ground correction: 0.0374 m`. The 3 cm gate was retained, and no full clip was published. This preset is an authoring example, not a validated motion asset.
 
-## Published intermediate policy snapshot
+## Published final policy
 
-- Exact fresh-run `model_9000.pt` exported on CPU with the native RSL-RL MLP export wrapper. Strict actor-state loading includes the saved normalization setting (disabled for this run). Checkpoint SHA256: `16d842deb58ac9df94d6b586a6a7c3221959490e1136cc96648e1371efa19d7a`.
-- The immutable snapshot is `demos/policies/stand_9000/`; the identical ONNX bytes are installed in `demos/sonic_web/assets/policy/policy.onnx`. Both are explicitly unignored. Export/PyTorch comparison passed 32 inputs; native C++ and browser observation/action contract checks passed. Reports are in the snapshot directory.
-- Browser loaded the actual ONNX, confirmed its reference and completed a four-second unforced physics rollout while remaining upright. This short smoke check does not validate external-force response. It starts with policy control OFF. This is an intermediate trained controller, distinct from the earlier diagnostic snapshot, and not a completed behavioral or hardware evaluation. Ongoing training and active hardware configuration were unchanged.
+The baseline run completed all 20,000 iterations and synced to W&B. Exact checkpoint `model_19999.pt` was exported on CPU, packaged as `demos/policies/stand_20000`, and passed both interface checks. The final ONNX is installed byte-for-byte in the browser assets. The former intermediate demo bundle was removed. This completed baseline does not contain the later bounded-action, rebalanced-sampling or slower-reference training changes.
+
+The final policy completed the four-second browser reference while remaining upright. Reset returned the timeline to zero; policy and physics were left OFF. The updated screenshot is `doc/images/policy_player.png`. This browser smoke check is separate from the 20-second native MuJoCo PD comparison and 12 held-out training-environment episodes.

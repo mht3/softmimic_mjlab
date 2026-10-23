@@ -1,7 +1,7 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Compliant Humanoid · Policy Player</title><link rel="stylesheet" href="css/style.css"><link rel="stylesheet" href="css/player.css"><script src="lib/ort.min.js"></script><script type="importmap">{"imports":{"three":"./lib/three/three.module.js","three/addons/controls/OrbitControls.js":"./lib/three/OrbitControls.js"}}</script></head>
 <body><canvas id="canvas"></canvas>
 <aside class="player-panel"><div class="eyebrow">UNITREE_G1_23DOF</div><h1>Compliant Humanoid</h1><p>Black/silver: physics robot<br><span class="cyan">Cyan: nominal reference ghost</span></p><p id="policy-provenance"></p><div id="status-text" role="status">Loading…</div>
-<label>Reference CSV<input id="reference-file" type="file" accept=".csv"></label><p id="reference-name">Reference required</p>
+<label>Reference motion</label><p id="reference-name">Reference required</p>
 <div class="control"><span>Physics</span><button id="btn-physics">OFF</button></div><div class="control"><span>Trained ONNX policy</span><button id="btn-policy" disabled>Awaiting matched policy</button></div><div class="control"><span>Camera follow</span><button id="btn-follow">ON</button></div>
 <label class="check"><input id="ghost-offset" type="checkbox" checked> Reference ghost beside robot</label>
 <label>Compliance stiffness <span id="stiffness-value">200</span> N/m<input id="stiffness" type="range" min="40" max="1000" step="10" value="200"></label>

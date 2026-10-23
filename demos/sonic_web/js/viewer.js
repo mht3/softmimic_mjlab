@@ -414,6 +414,14 @@ export class MuJoCoViewer {
   // ctrl: Float32Array[23] torques in MuJoCo actuator order.
   // Runs 4 sub-steps at dt=0.005s each (= 0.02s = 50 Hz policy rate).
 
+  setPolicyActuation(enabled) {
+    if (!this._actuatorParameters) this._actuatorParameters = {
+      gain: Float64Array.from(this.model.actuator_gainprm),
+      bias: Float64Array.from(this.model.actuator_biasprm)};
+    this.model.actuator_gainprm.set(enabled ? this._actuatorParameters.gain : new Float64Array(this._actuatorParameters.gain.length));
+    this.model.actuator_biasprm.set(enabled ? this._actuatorParameters.bias : new Float64Array(this._actuatorParameters.bias.length));
+  }
+
   stepPhysics(ctrl) {
     if (!this._ready) return;
     this._applyDragForce();
@@ -424,9 +432,8 @@ export class MuJoCoViewer {
   }
 
   // ── Single physics sub-step (no geom sync) ─────────────────────────────────
-  // Used by the policy loop which re-evaluates PD torques at each sub-step,
-  // matching base_sim.py: sim_step() runs at 200 Hz, recomputing torques from
-  // fresh qpos/qvel each time, while the policy target only updates at 50 Hz.
+  // The prepared policy scene evaluates PD implicitly inside MuJoCo.
+  // Position targets update at 50 Hz; drag forces update every substep.
 
   stepPhysicsOnce(ctrl) {
     if (!this._ready) return;

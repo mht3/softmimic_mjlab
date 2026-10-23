@@ -1,0 +1,17 @@
+{
+  "source_run": "/home/mht/research/rl/humanoid/compliance/softmimic_mjlab/logs/rsl_rl/g1_23dof_compliant_tracking/2026-10-22_08-06-12_collision_recovery_stand_20k_fresh_20261022",
+  "reference_sha256": "152ca5ed762e27dcb74bf3257fc970f7108724c0467f12b536548f96d85c0a83",
+  "dataset": "/home/mht/research/rl/humanoid/compliance/softmimic_mjlab/src/assets/compliant_motions/g1_23dof/stand",
+  "source_onnx_sha256": "a8a8f767c32d18db02a4b44f05e8b91abaad93d703b8cfc801be365f41a6a28f",
+  "bundle_onnx_sha256": "a8a8f767c32d18db02a4b44f05e8b91abaad93d703b8cfc801be365f41a6a28f",
+  "observation_dim": 327,
+  "action_dim": 23,
+  "stiffness": 200,
+  "rotational_stiffness": 1,
+  "behavior_validated": false,
+  "hardware_started": false,
+  "checkpoint_iteration": 19999,
+  "training_iterations": 20000,
+  "checkpoint_sha256": "dcd5f1046dc055597786f1fef1969bd705faf8e43501061747865483b2abd0f3",
+  "wandb_url": "https://wandb.ai/mht3/g1_compliance/runs/xklelhb4"
+}

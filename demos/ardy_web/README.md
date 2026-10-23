@@ -75,13 +75,17 @@ The geometry gate requires zero detected self-penetration at tested samples, joi
 ## Verification
 
 ```bash
-CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=2 \
-  ../sonic23/.venv-ardy/bin/python -m unittest demos.ardy_web.test_retarget \
+../sonic23/.venv-ardy/bin/python -m unittest demos.ardy_web.test_retarget \
   demos.ardy_web.test_streaming demos.ardy_web.test_constraints -v
+```
+
+```bash
 node --test demos/ardy_web/test_constraint_plan.mjs demos/ardy_web/test_timeline.mjs \
   demos/ardy_web/test_motion_blend.mjs demos/ardy_web/test_csv_export.mjs
-CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=2 \
-  ../sonic23/.venv-ardy/bin/python demos/ardy_web/validate_library.py
+```
+
+```bash
+../sonic23/.venv-ardy/bin/python demos/ardy_web/validate_library.py
 ```
 
 Twelve Python tests pass, covering retargeting, streaming and all six native constraint types. The earlier independent library validation passed **four clips / 1,588 frames**, checked interpolated paths, and cross-checked CSV/NPZ/JSON values and order; it does not cover subsequently generated clips. Report: `sonic23/ardy_library_validation.json`. Each new generation has its own audit. Real CPU prompt encoding/generation and browser submission -> export -> playback were exercised, along with file downloads and HTTP request validation. The cold-encoder and cached-embedding standing runs produced **bitwise-identical source and retargeted qpos** for seed 42 (`sonic23/ardy_seed_reproducibility.json`). See [workflow verification](../WORKFLOW_VALIDATION.md) for the constrained root and circle results.
@@ -89,8 +93,7 @@ Twelve Python tests pass, covering retargeting, streaming and all six native con
 To retry a saved source after an intentional retargeter improvement without rerunning ARDY:
 
 ```bash
-CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=2 \
-  ../sonic23/.venv-ardy/bin/python demos/ardy_web/retarget_saved.py \
+../sonic23/.venv-ardy/bin/python demos/ardy_web/retarget_saved.py \
   ../sonic23/ardy_motions/SOURCE_UUID
 ```
 
@@ -134,10 +137,18 @@ Current server: tmux `ardy-demo`, port 8089, log `sonic23/logs/ardy_stream_demo.
 
 ```bash
 node demos/ardy_web/test_timeline.mjs
+```
+
+```bash
 node demos/ardy_web/test_motion_blend.mjs
+```
+
+```bash
 node demos/ardy_web/test_csv_export.mjs
-CUDA_VISIBLE_DEVICES='' OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=2 \
-  ../sonic23/.venv-ardy/bin/python -m unittest \
+```
+
+```bash
+../sonic23/.venv-ardy/bin/python -m unittest \
   demos.ardy_web.test_streaming demos.ardy_web.test_retarget -v
 ```
 

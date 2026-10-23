@@ -1,0 +1,31 @@
+{
+  "checkpoint_sha256": "dcd5f1046dc055597786f1fef1969bd705faf8e43501061747865483b2abd0f3",
+  "finite": true,
+  "seed": 123,
+  "num_envs": 12,
+  "steps": 1800,
+  "by_mode": {
+    "collision-emulator": {
+      "completed_episodes": 4,
+      "timeouts": 4,
+      "early_terminations": 0,
+      "mean_episode_seconds": 30.0,
+      "peak_reactive_force_N": 0.0
+    },
+    "forcefield": {
+      "completed_episodes": 4,
+      "timeouts": 4,
+      "early_terminations": 0,
+      "mean_episode_seconds": 30.0,
+      "peak_reactive_force_N": 175.85218811035156
+    },
+    "zero-wrench": {
+      "completed_episodes": 4,
+      "timeouts": 4,
+      "early_terminations": 0,
+      "mean_episode_seconds": 30.0,
+      "peak_reactive_force_N": 0.0
+    }
+  },
+  "test_description": "Small deterministic CPU held-out evaluation; not a hardware certificate"
+}

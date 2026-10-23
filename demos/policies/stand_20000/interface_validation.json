@@ -4,7 +4,7 @@
     "frames": 6,
     "observation_dim": 327,
     "action_dim": 23,
-    "max_action_error": 6.639831543253649e-06,
+    "max_action_error": 2.2839941408392406e-05,
     "checks": [
       "C++ versus browser observations",
       "C++ ONNX versus CPU reference",

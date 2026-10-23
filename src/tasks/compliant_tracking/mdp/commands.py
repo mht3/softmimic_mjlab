@@ -72,7 +72,7 @@ _COMPLIANT_KEYS = (
 _FOOT_BODY_NAMES = ("left_ankle_roll_link", "right_ankle_roll_link")
 
 
-def resolve_motion_files(motion_source: str) -> list[Path]:
+def resolve_motion_files(motion_source: str, mode_weights: dict[str, float] | None = None) -> list[Path]:
   """Resolve a motion file/directory into the list of NPZ files to load.
 
   A directory containing the augmentation mode subdirectories is expanded with
@@ -95,13 +95,18 @@ def resolve_motion_files(motion_source: str) -> list[Path]:
       d.name: sorted(path for path in d.glob("*.npz") if not path.name.startswith("."))
       for d in mode_dirs
     }
+    weights = _HYBRID_MODE_WEIGHTS if mode_weights is None else mode_weights
+    if set(weights) != set(_HYBRID_MODES) or any(not math.isfinite(w) or w < 0 for w in weights.values()) or not any(weights.values()):
+      raise ValueError("Hybrid weights must specify all three modes with finite nonnegative weights")
     max_count = max(len(files) for files in per_mode.values())
     files: list[Path] = []
     for mode in _HYBRID_MODES:
       mode_files = per_mode[mode]
       if not mode_files:
         raise ValueError(f"Empty Hybrid mode: {source / mode}")
-      target_count = _HYBRID_MODE_WEIGHTS[mode] * max_count
+      if weights[mode] == 0:
+        continue
+      target_count = weights[mode] * max_count
       repeats = max(round(target_count / len(mode_files)), 1)
       files.extend(mode_files * repeats)
     if not files:
@@ -124,9 +129,9 @@ class CompliantMotionLoader:
   """Loads a set of augmented motion NPZ files as one concatenated timeline."""
 
   def __init__(
-    self, motion_source: str, body_indexes: torch.Tensor, device: str = "cpu"
+    self, motion_source: str, body_indexes: torch.Tensor, device: str = "cpu", mode_weights=None
   ) -> None:
-    files = resolve_motion_files(motion_source)
+    files = resolve_motion_files(motion_source, mode_weights)
 
     stacks: dict[str, list[np.ndarray]] = {}
     starts: list[int] = []
@@ -239,7 +244,7 @@ class CompliantMotionCommand(MotionCommand):
     )
 
     self.motion = CompliantMotionLoader(
-      self.cfg.motion_file, self.body_indexes, device=self.device
+      self.cfg.motion_file, self.body_indexes, device=self.device, mode_weights=cfg.mode_weights
     )
     if cfg.require_nominal_reference and not self.motion.has_nominal_reference:
       raise ValueError("Reference-conditioned compliance needs nominal_* NPZ arrays. "
@@ -971,6 +976,8 @@ class CompliantMotionCommandCfg(MotionCommandCfg):
 
   force_computation_mode: Literal["feedforward", "forcefield"] = "forcefield"
   # Optional guards; infinity preserves released online spring semantics.
+  deployment_reference_mode: Literal["constant_nominal", "nominal_motion"] = "constant_nominal"
+  mode_weights: dict[str, float] | None = None
   max_force: float = math.inf
   max_torque: float = math.inf
 

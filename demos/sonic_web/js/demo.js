@@ -1,7 +1,7 @@
 /** Fixed-reference playback plus the matched SoftMimic ONNX controller. */
 import {MuJoCoViewer} from './viewer.js';
 import {SoftMimicPolicy} from './policy.js';
-import {validateReference,parseReferenceCsv,referenceFrame} from './reference.js';
+import {validateReference,referenceFrame} from './reference.js';
 const $=id=>document.getElementById(id),viewer=new MuJoCoViewer($('canvas'));
 let motion=null,policy=null,policyReady=false,policyEnabled=false,physics=false,running=false,time=0,revision=0,busy=false,clock=0,names=[];
 const duration=()=>motion?(motion.frames-1)/motion.fps:0;
@@ -19,7 +19,6 @@ function reset(at=0){
 }
 function checkPair(){policyReady=false;if(!policy||!motion)return;try{validateReference(motion,policy.config);policyReady=true;status('Reference matches policy. Enable policy control, then press Play.');}catch(e){policyEnabled=false;status(e.message);}}
 function installMotion(m,name){validateReference(m);motion=m;motion.name=name;policyEnabled=false;physics=false;checkPair();$('reference-name').textContent=name;$('reference-clip').textContent=name;$('reference-clip').style.width=`${duration()/30*100}%`;reset();}
-$('reference-file').onchange=async e=>{try{const file=e.target.files[0];if(!file)return;if(file.size>12000000)throw Error('CSV is too large');installMotion(parseReferenceCsv(await file.text(),names),file.name);}catch(e){status(e.message);}};
 $('btn-play').onclick=()=>{if(!motion)return;if(time>=duration())reset();running=!running;controls();};
 $('btn-restart').onclick=()=>reset();
 $('scrub').oninput=()=>reset(Number($('scrub').value));
@@ -33,8 +32,8 @@ window.addEventListener('keydown',e=>{if(e.target.closest('input,select,textarea
 async function step(){
  const rev=revision;
  if(physics){
-  if(policyEnabled&&policyReady){policy.pushHistory(viewer.data.qpos,viewer.data.qvel);const action=await policy.infer();if(rev!==revision||!running||!policyEnabled)return;const targets=policy.actionToTargets(action);for(let i=0;i<4;i++)viewer.stepPhysicsOnce(policy.targetsToCtrl(targets,viewer.data.qpos,viewer.data.qvel));viewer.finalizeStep();}
-  else viewer.stepPhysics(new Float32Array(23));
+  if(policyEnabled&&policyReady){viewer.setPolicyActuation(true);policy.pushHistory(viewer.data.qpos,viewer.data.qvel,motion,time);const action=await policy.infer();if(rev!==revision||!running||!policyEnabled)return;const targets=policy.actionToTargets(action);for(let i=0;i<4;i++)viewer.stepPhysicsOnce(policy.config.actuation==='implicit_pd'?targets:policy.targetsToCtrl(targets,viewer.data.qpos,viewer.data.qvel));viewer.finalizeStep();}
+  else {viewer.setPolicyActuation(false);viewer.stepPhysics(new Float32Array(23));}
  }
  if(rev!==revision)return;time=Math.min(duration(),time+.02);if(time>=duration())running=false;ghost();controls();
 }
@@ -42,7 +41,7 @@ function tick(ts){requestAnimationFrame(tick);if(viewer.ready&&running&&!busy&&t
 (async()=>{try{
  viewer.initThree();await viewer.loadScene(status);viewer.initDragForce();const contract=await fetch('assets/robot/contract.json').then(r=>r.json());names=contract.joint_names;
  const response=await fetch('assets/motions/stand.json');if(!response.ok)throw Error('Prepare the viewer with --reference YOUR_MOTION.csv first.');const m=await response.json();installMotion(m,m.name||'Reference');
- const config=await fetch('assets/policy/config.json');if(config.ok){policy=new SoftMimicPolicy();await policy.load(await config.json(),'assets/policy/policy.onnx');checkPair();if(policy.config.checkpoint_iteration!==undefined)$('policy-provenance').textContent=`Iteration ${policy.config.checkpoint_iteration} · intermediate training snapshot`;for(const [id,key] of [['stiffness','stiffness_command'],['rotational-stiffness','rotational_stiffness_command']]){$(id).value=policy.config[key];$(id+'-value').textContent=$(id).value;}}
+ const config=await fetch('assets/policy/config.json');if(config.ok){policy=new SoftMimicPolicy();await policy.load(await config.json(),'assets/policy/policy.onnx');checkPair();if(policy.config.checkpoint_iteration!==undefined)$('policy-provenance').textContent=policy.config.training_status==='completed training'?`${(policy.config.checkpoint_iteration+1).toLocaleString()} training iterations · completed run`:`Iteration ${policy.config.checkpoint_iteration} · intermediate training snapshot`;for(const [id,key] of [['stiffness','stiffness_command'],['rotational-stiffness','rotational_stiffness_command']]){$(id).value=policy.config[key];$(id+'-value').textContent=$(id).value;}}
  else status('Reference ready. Install a matched trained ONNX bundle to enable policy control.');
  $('loading-overlay').hidden=true;controls();requestAnimationFrame(tick);
 }catch(e){status(e.message);$('loading-status').textContent=e.message;}})();

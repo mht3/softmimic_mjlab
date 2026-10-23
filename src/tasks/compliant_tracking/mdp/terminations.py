@@ -86,3 +86,11 @@ def bad_motion_body_pos_z_only(
     - command.robot_body_pos_w[:, body_indexes, -1]
   )
   return torch.any(error > threshold, dim=-1)
+
+
+def extreme_robot_state(env):
+  """End divergent physics states before the next policy observation."""
+  data = env.scene["robot"].data
+  return ((data.joint_vel.abs() > 100.).any(dim=-1)
+          | (data.root_link_ang_vel_b.abs() > 30.).any(dim=-1)
+          | (data.root_link_lin_vel_w.abs() > 20.).any(dim=-1))

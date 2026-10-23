@@ -11,31 +11,43 @@ namespace isaaclab
 namespace mdp
 {
 
+inline std::vector<float> policy_nominal_reference(ManagerBasedRLEnv* env,
+    const YAML::Node& params, const std::string& name, std::size_t dimension) {
+    if (params["reference_mode"] && params["reference_mode"].as<std::string>() == "nominal_motion") {
+        if (!env->nominal_reference) throw std::runtime_error("Missing nominal motion provider");
+        auto value = env->nominal_reference(name);
+        if (value.size() != dimension) throw std::runtime_error("Nominal channel dimension mismatch");
+        for (auto x : value) if (!std::isfinite(x)) throw std::runtime_error("Non-finite nominal channel");
+        return value;
+    }
+    return constant_nominal_reference(params, name, dimension);
+}
+
 // Standing references are exported from the full nominal training dataset.
 // They intentionally do not use State_Mimic's adapted motion playback arrays.
 REGISTER_OBSERVATION(reference_dof_pos)
 {
-    return constant_nominal_reference(params, "reference_dof_pos", env->robot->data.joint_ids_map.size());
+    return policy_nominal_reference(env, params, "reference_dof_pos", env->robot->data.joint_ids_map.size());
 }
 REGISTER_OBSERVATION(reference_xy_vel)
 {
-    return constant_nominal_reference(params, "reference_xy_vel", 2);
+    return policy_nominal_reference(env, params, "reference_xy_vel", 2);
 }
 REGISTER_OBSERVATION(reference_yaw_vel)
 {
-    return constant_nominal_reference(params, "reference_yaw_vel", 1);
+    return policy_nominal_reference(env, params, "reference_yaw_vel", 1);
 }
 REGISTER_OBSERVATION(reference_root_height)
 {
-    return constant_nominal_reference(params, "reference_root_height", 1);
+    return policy_nominal_reference(env, params, "reference_root_height", 1);
 }
 REGISTER_OBSERVATION(reference_gravity_vector)
 {
-    return constant_nominal_reference(params, "reference_gravity_vector", 3);
+    return policy_nominal_reference(env, params, "reference_gravity_vector", 3);
 }
 REGISTER_OBSERVATION(reference_foot_contact)
 {
-    return constant_nominal_reference(params, "reference_foot_contact", 2);
+    return policy_nominal_reference(env, params, "reference_foot_contact", 2);
 }
 
 REGISTER_OBSERVATION(base_ang_vel)

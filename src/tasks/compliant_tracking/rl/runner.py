@@ -13,6 +13,7 @@ from mjlab.rl.runner import MjlabOnPolicyRunner
 from mjlab.tasks.tracking.mdp import MotionCommand
 from ..mdp.commands import resolve_motion_files
 from .health_metrics import ModeHealthMetrics
+from .action_diagnostics import ActionDiagnostics
 
 
 class CompliantMotionTrackingOnPolicyRunner(MjlabOnPolicyRunner):
@@ -38,9 +39,15 @@ class CompliantMotionTrackingOnPolicyRunner(MjlabOnPolicyRunner):
     self.registry_name = registry_name
     if log_dir is not None:
       command = self.env.unwrapped.command_manager.get_term("motion")
-      files = resolve_motion_files(command.cfg.motion_file)
+      files = resolve_motion_files(command.cfg.motion_file, command.cfg.mode_weights)
       modes = [files[i].parent.name for i in command.motion_ids.cpu().tolist()]
       health = ModeHealthMetrics(modes, device)
+      diagnostics = ActionDiagnostics(log_dir, train_cfg.get("clip_actions"))
+      original_env_step = self.env.step
+      def step_with_diagnostics(actions):
+        diagnostics.observe(actions, command)
+        return original_env_step(actions)
+      self.env.step = step_with_diagnostics
       original_step = self.logger.process_env_step
       original_log = self.logger.log
 
@@ -51,6 +58,7 @@ class CompliantMotionTrackingOnPolicyRunner(MjlabOnPolicyRunner):
       def log_with_health(*args, **kwargs):
         original_log(*args, **kwargs)
         values = health.flush()
+        values.update(diagnostics.flush())
         if self.logger.writer is not None:
           iteration = kwargs["it"] if "it" in kwargs else args[0]
           for name, value in values.items():

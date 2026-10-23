@@ -13,10 +13,13 @@ class SimulationConfig:
     com_cost: float
     com_cost_z_factor: float
     force_mode: str
+    max_joint_velocity: Optional[float] = None
+    max_wrist_velocity: Optional[float] = None
     upper_joint_cost: float = 0.0
     torso_orientation_cost: float = 0.0
     repeat_frame_time: Optional[float] = None
     record_video: bool = False
     output_filename: str = "ik_simulation.mp4"
     num_files: int = 10
+    workers: int = 10
     output_dir: str = "./augmented_data"

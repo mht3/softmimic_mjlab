@@ -66,7 +66,7 @@ def filter_reference(motion: str, motions_dir: Path) -> Path:
     return dst
 
 
-def augment(motion: str, mode: str, ref23: Path, num_files: int, seed: int, output_root: Path = OUT_ROOT, torso_orientation_cost: float = 0.) -> Path:
+def augment(motion: str, mode: str, ref23: Path, num_files: int, seed: int, output_root: Path = OUT_ROOT, torso_orientation_cost: float = 0., max_joint_velocity: float | None = None, max_wrist_velocity: float | None = None, workers: int = 10) -> Path:
     """Run the mink augmentation on the 23-DOF model into the output folder."""
     out_dir = output_root.resolve() / motion / mode
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -79,6 +79,9 @@ def augment(motion: str, mode: str, ref23: Path, num_files: int, seed: int, outp
         "--seed", seed,
         "--output_dir", out_dir,
         "--torso_orientation_cost", torso_orientation_cost,
+        "--workers", workers,
+        *([] if max_joint_velocity is None else ["--max_joint_velocity", max_joint_velocity]),
+        *([] if max_wrist_velocity is None else ["--max_wrist_velocity", max_wrist_velocity]),
     ], cwd=AUG_DIR)
     return out_dir
 

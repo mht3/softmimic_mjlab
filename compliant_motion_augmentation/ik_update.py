@@ -57,7 +57,7 @@ def decay_residual_towards_reference(
 
     idx = ik_solver.actuated_qpos_indices
     res_joints = q[idx] - qpos_ref[idx]
-    max_step_joint = MAX_RELEASE_JOINT_VEL * dt
+    max_step_joint = np.minimum(MAX_RELEASE_JOINT_VEL, getattr(ik_solver, "joint_velocity_limits", MAX_RELEASE_JOINT_VEL)) * dt
     q_new[idx] = qpos_ref[idx] + np.sign(res_joints) * np.maximum(
         np.abs(res_joints) - max_step_joint, 0.0
     )
@@ -86,9 +86,11 @@ def bound_frame_joint_step(ik_solver, previous_q, dt):
     joint_mask = np.isin(model.jnt_qposadr, ik_solver.actuated_qpos_indices)
     joint_dofs = model.jnt_dofadr[joint_mask]
     peak = float(np.max(np.abs(velocity[joint_dofs]), initial=0.))
-    if peak > MAX_IK_JOINT_VEL:
+    limits = np.asarray(getattr(ik_solver, "joint_velocity_limits", MAX_IK_JOINT_VEL))
+    ratio = float(np.max(np.abs(velocity[joint_dofs]) / limits, initial=0.))
+    if ratio > 1.:
         q = previous_q.copy()
-        mujoco.mj_integratePos(model, q, velocity * (MAX_IK_JOINT_VEL / peak), dt)
+        mujoco.mj_integratePos(model, q, velocity / ratio, dt)
     ik_solver.configuration.update(q=q)
     mujoco.mj_forward(ik_solver.model, ik_solver.data)
 
