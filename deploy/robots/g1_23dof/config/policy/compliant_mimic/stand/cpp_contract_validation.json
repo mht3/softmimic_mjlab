@@ -1,0 +1,15 @@
+{
+  "passed": true,
+  "frames": 6,
+  "observation_dim": 327,
+  "action_dim": 23,
+  "max_action_error": 1.239741455094645e-05,
+  "checks": [
+    "C++ versus browser observations",
+    "C++ ONNX versus CPU reference",
+    "action scaling and offset",
+    "reset clears motor targets",
+    "wrong dimensions and NaN rejected"
+  ],
+  "hardware_started": false
+}

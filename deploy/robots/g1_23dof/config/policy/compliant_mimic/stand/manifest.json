@@ -1,0 +1,35 @@
+{
+  "source_run": "logs/rsl_rl/g1_23dof_compliant_tracking/2026-10-23_13-21-15_stand_stable_resume_20000_to_25k",
+  "reference_sha256": "6a1ea6d341a362f0dd70637378759971afdfa12031c864328ce536ab046be53e",
+  "dataset": "/home/mht/research/rl/humanoid/compliance/softmimic_mjlab/src/assets/compliant_motions/g1_23dof/streamer_stand_smooth",
+  "source_onnx_sha256": "273422a34cf77abe77ab8eac45ff307a158a18de422db41bdeaeaeedac2ecc1e",
+  "bundle_onnx_sha256": "273422a34cf77abe77ab8eac45ff307a158a18de422db41bdeaeaeedac2ecc1e",
+  "observation_dim": 327,
+  "action_dim": 23,
+  "stiffness": 200,
+  "rotational_stiffness": 1,
+  "behavior_validated": false,
+  "hardware_started": false,
+  "checkpoint_iteration": 24000,
+  "checkpoint_sha256": "5f0c430b7337862b98901174954c8730403627b8d3714b083557feb9ec17a7b2",
+  "wandb_url": "https://wandb.ai/mht3/g1_compliance/runs/05m7g7wh",
+  "training_status": "selected checkpoint 24000 from completed 25000-iteration run; final 24999 evaluated and not selected",
+  "files": {
+    "exported/policy.onnx": "273422a34cf77abe77ab8eac45ff307a158a18de422db41bdeaeaeedac2ecc1e",
+    "params/deploy.yaml": "d85dea1d6915036befcd68ff6371de08722af9f4f5ecc61645403fb71a674123",
+    "params/reference.csv": "6a1ea6d341a362f0dd70637378759971afdfa12031c864328ce536ab046be53e",
+    "controller_config.yaml": "ea50d66709294554d910f6388f8c0a0e9c6115aef8ab0efb599d1de4901f39d1"
+  },
+  "training_run_completed": true,
+  "selection_report": "checkpoint_selection_11_24k.json",
+  "selection_report_sha256": "1725dff86998b0c537685d45cb8718cadea9f47d7fdd4b16958efce2ead42bfd",
+  "simulation_validation": {
+    "standing_and_recovery_passes": 30,
+    "standing_and_recovery_trials": 30,
+    "delay_stress_survivals": 6,
+    "delay_stress_trials": 6,
+    "hardware_validated": false
+  },
+  "final_checkpoint_review": "final_25k_comparison.json",
+  "final_checkpoint_review_sha256": "61b20647220e741bfe289a8a01de31a2f2c4aa097624ff66eb3198b282ecded1"
+}

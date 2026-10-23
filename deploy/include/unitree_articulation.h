@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <mutex>
+#include <cmath>
+#include <stdexcept>
 #include "isaaclab/assets/articulation/articulation.h"
 
 namespace unitree
@@ -32,12 +35,18 @@ public:
             lowstate->msg_.imu_state().quaternion()[2],
             lowstate->msg_.imu_state().quaternion()[3]
         );
+        const float norm = data.root_quat_w.norm();
+        if (!std::isfinite(norm) || norm < 0.9f || norm > 1.1f || !data.root_ang_vel_b.allFinite())
+            throw std::runtime_error("Invalid pelvis IMU sample");
+        data.root_quat_w.normalize();
         data.projected_gravity_b = data.root_quat_w.conjugate() * data.GRAVITY_VEC_W;
         // joint positions and velocities
         for(int i(0); i< data.joint_ids_map.size(); i++) {
             data.joint_pos[i] = lowstate->msg_.motor_state()[data.joint_ids_map[i]].q();
             data.joint_vel[i] = lowstate->msg_.motor_state()[data.joint_ids_map[i]].dq();
         }
+        if (!data.joint_pos.allFinite() || !data.joint_vel.allFinite())
+            throw std::runtime_error("Invalid motor encoder sample");
     }
 
     LowStatePtr lowstate;

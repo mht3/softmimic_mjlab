@@ -15,13 +15,13 @@ void init_fsm_state()
     if(!lowcmd_sub->isTimeout())
     {
         spdlog::critical("The other process is using the lowcmd channel, please close it first.");
-        unitree::robot::go2::shutdown();
-        // exit(0);
+        throw std::runtime_error("Another controller owns rt/lowcmd; refusing to take over");
     }
     FSMState::lowcmd = std::make_unique<LowCmd_t>();
     FSMState::lowstate = std::make_shared<LowState_t>();
     spdlog::info("Waiting for connection to robot...");
     FSMState::lowstate->wait_for_connection();
+    FSMState::lowstate->set_timeout_ms(100);
     spdlog::info("Connected to robot.");
 }
 
@@ -49,8 +49,8 @@ int main(int argc, char** argv)
     fsm->start();
 
     std::cout << "Press [L2 + Up] to enter FixStand mode.\n";
-    std::cout << "And then press [R2 + A] to start controlling the robot.\n";
-    std::cout << "And then press [R1 + A/B/Y/X] to control the robot dance.\n";
+    std::cout << "Then [R1 + A] enters compliant standing; [L2 + B] returns to Passive.\n";
+
 
     while (true)
     {

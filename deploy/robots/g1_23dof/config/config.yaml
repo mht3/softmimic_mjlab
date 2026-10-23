@@ -1,125 +1,182 @@
 FSM:
-  _: # enabled fsms
+  _:
     Passive:
       id: 1
     FixStand:
       id: 2
-    Velocity:
-      id: 3
-      type: RLBase
-    Static_Balance:
-      id: 4
-      type: RLBase
     Mimic_Compliant_Stand:
       id: 5
       type: Mimic
-    # Mimic_Dance1_subject2:
-    #   id: 6
-    #   type: Mimic
-    # Mimic_Swallow_Balance:
-    #   id: 7
-    #   type: Mimic
-
   Passive:
-    transitions: 
+    transitions:
       FixStand: LT + up.on_pressed
-    mode: [
-      1,1,1,1,1,1,
-      1,1,1,1,1,1,
-      1,1,1,
-      1,1,1,1,1,1,1,
-      1,1,1,1,1,1,1,
-    ]
-    kd: [
-      3,3,3,3,3,3,
-      3,3,3,3,3,3,
-      3,3,3,
-      3,3,3,3,3,3,3,  
-      3,3,3,3,3,3,3,  
-    ]
+    mode:
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    kd:
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
   FixStand:
-    transitions: 
-      Passive: LT + B.on_pressed
-      Velocity: RT + A.on_pressed
-      Static_Balance: RT + B.on_pressed
-    kp: [
-      100., 100., 100., 150., 40., 40.,
-      100., 100., 100., 150., 40., 40.,
-      200,200,200,
-      40,40,40,40,40,40,40,
-      40,40,40,40,40,40,40,
-    ]
-    kd: [
-      2,2,2,4,2,2,
-      2,2,2,4,2,2,
-      5,5,5,
-      10,10,10,10,10,10,10,
-      10,10,10,10,10,10,10,
-    ]
-    ts: [0, 3]
-    qs: [
-      [],
-      [ -0.1, 0,0,0.3,-0.2,0,
-        -0.1, 0,0,0.3,-0.2,0,
-        0,0,0,
-        0.35, 0.18,0,0.87,0,0,0,
-        0.35,-0.18,0,0.87,0,0,0
-      ]
-    ]
-  Velocity:
     transitions:
       Passive: LT + B.on_pressed
-      Static_Balance: RT + B.on_pressed
       Mimic_Compliant_Stand: RB + A.on_pressed
-
-      # Mimic_Dance1_subject2: RB + A.on_pressed
-      # Mimic_Swallow_Balance: RB + B.on_pressed
-    limit_angle: 1.0  # radians (~57 deg); triggers passive on fall
-    policy_dir: config/policy/velocity
-
-  # Mimic_Dance1_subject2:
-  #   transitions:
-  #     Passive: LT + B.on_pressed
-  #     Velocity: RT + A.on_pressed
-  #     Static_Balance: RT + B.on_pressed
-  #   motion_file: config/policy/mimic/dance1_subject2/params/dance1_subject2.npz
-  #   policy_dir: config/policy/mimic/dance1_subject2/
-  #   limit_angle: 1.0  # radians (~57 deg); triggers passive on fall
-  #   time_start: 0.0
-  #   time_end: 500.0
-    
-  # Mimic_Swallow_Balance:
-  #   transitions:
-  #     Passive: LT + B.on_pressed
-  #     Velocity: RT + A.on_pressed
-  #     Static_Balance: RT + B.on_pressed
-  #   limit_angle: 1.22
-  #   motion_file: config/policy/mimic/swallow_balance/params/swallow_balance_23dof.npz
-  #   policy_dir: config/policy/mimic/swallow_balance/v1
-  #   time_start: 0.0
-  #   time_end: 500.0
-
-  # SoftMimic compliant tracking policy. desired_stiffness [40, 1000] N/m and
-  # desired_rotational_stiffness [0.1, 10] Nm/rad are observed by the policy;
-  # adjust online with the d-pad (up/down: translational, left/right: rotational).
+    kp:
+    - 100.0
+    - 100.0
+    - 100.0
+    - 150.0
+    - 40.0
+    - 40.0
+    - 100.0
+    - 100.0
+    - 100.0
+    - 150.0
+    - 40.0
+    - 40.0
+    - 200
+    - 200
+    - 200
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    kd:
+    - 2
+    - 2
+    - 2
+    - 4
+    - 2
+    - 2
+    - 2
+    - 2
+    - 2
+    - 4
+    - 2
+    - 2
+    - 5
+    - 5
+    - 5
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    ts:
+    - 0
+    - 3
+    qs:
+    - []
+    - - -0.145926
+      - 0.094555
+      - 0.095544
+      - 0.290836
+      - -0.157019
+      - -0.039693
+      - -0.11979
+      - -0.026607
+      - -0.202988
+      - 0.263638
+      - -0.163883
+      - 0.031342
+      - 0.005877
+      - 0.0
+      - 0.0
+      - 0.3047
+      - 0.086903
+      - 0.052122
+      - 0.524493
+      - 0.808941
+      - 0.0
+      - 0.0
+      - 0.238896
+      - 0.027757
+      - -0.15556
+      - 0.591245
+      - -0.921814
+      - 0.0
+      - 0.0
   Mimic_Compliant_Stand:
-    transitions:
-      Passive: LT + B.on_pressed
-      Velocity: RT + A.on_pressed
-    limit_angle: 1.25
-    motion_file: config/policy/compliant_mimic/stand/params/stand.npz
     policy_dir: config/policy/compliant_mimic/stand
-    desired_stiffness: 200.0
-    desired_rotational_stiffness: 1.0
+    desired_stiffness: 200
+    desired_rotational_stiffness: 1
     time_start: 0.0
-    time_end: 500.0
-    loop: true  # replay the clip indefinitely instead of falling back to Velocity
-
-  Static_Balance:
+    time_end: 0.04
+    loop: true
+    limit_angle: 1.25
     transitions:
       Passive: LT + B.on_pressed
-      Velocity: RT + A.on_pressed
-      Mimic_Compliant_Stand: RB + A.on_pressed
-      # Mimic_Dance1_subject2: RB + A.on_pressed
-      # Mimic_Swallow_Balance: RB + B.on_pressed# radians
-    policy_dir: config/policy/static_balance/v1_baseline # v2_visitation_critic_l3_ball, or v3_visitation_critic_rew_bin
+    reference_csv: config/policy/compliant_mimic/stand/params/reference.csv
+    policy_watchdog_ms: 100

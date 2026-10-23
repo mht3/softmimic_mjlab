@@ -46,13 +46,13 @@ export class SoftMimicPolicy {
     if (out[this.session.outputNames[0]].data.length !== 23) throw new Error('Expected 23 actions');
   }
   reset() { this.history = {}; this.lastAction = new Float32Array(23); this.generation=(this.generation||0)+1; }
-  pushHistory(qpos,qvel,reference=null,time=0) {
+  pushHistory(qpos,qvel,reference=null,time=0,sensors=null) {
     const c=this.config;
     const live={
-      base_ang_vel:Array.from(qvel.slice(3,6)),
-      projected_gravity:gravityInBody(qpos.slice(3,7)),
-      joint_pos_rel:Array.from(qpos.slice(7,30),(x,i)=>x-c.default_joint_pos[i]),
-      joint_vel_rel:Array.from(qvel.slice(6,29)),last_action:Array.from(this.lastAction),
+      base_ang_vel:sensors?.base_ang_vel ?? Array.from(qvel.slice(3,6)),
+      projected_gravity:sensors?.projected_gravity ?? gravityInBody(qpos.slice(3,7)),
+      joint_pos_rel:Array.from(sensors?.joint_pos ?? qpos.slice(7,30),(x,i)=>x-c.default_joint_pos[i]),
+      joint_vel_rel:Array.from(sensors?.joint_vel ?? qvel.slice(6,29)),last_action:Array.from(this.lastAction),
       desired_stiffness_log:[Math.log(c.stiffness_command+1e-6)],
       desired_rotational_stiffness_log:[Math.log(c.rotational_stiffness_command+1e-6)]};
     for (const [name,term] of Object.entries(c.observations)) {
@@ -63,6 +63,7 @@ export class SoftMimicPolicy {
         raw=reference.channels[name]?.[frame];
       }
       if(!raw || raw.length!==sizes[name]) throw new Error(`Missing nominal channel ${name}`);
+      if (!Array.from(raw).every(Number.isFinite)) throw new Error(`Invalid sensor/reference: ${name}`);
       // Training clips each raw term before scaling and history insertion.
       const value = raw.map((v,i)=> (term.clip ? Math.max(term.clip[0],Math.min(term.clip[1],v)) : v)*term.scale[i]);
       if (!value.every(Number.isFinite)) throw new Error(`Non-finite observation: ${name}`);

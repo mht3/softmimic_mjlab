@@ -30,8 +30,17 @@ private:
     std::thread policy_thread;
     std::atomic<bool> policy_thread_running{false};
     std::atomic<bool> policy_fault{false};
+    std::atomic<bool> policy_ready_{false};
+    std::atomic<bool> motion_finished_{false};
     std::array<float, 2> time_range_;
     bool loop_ = false;
+    static int64_t steady_ms() {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+    }
+    std::atomic<int64_t> last_policy_ms_{0};
+    float limit_angle_ = 1.25f;
+    int watchdog_ms_ = 100;
 };
 
 

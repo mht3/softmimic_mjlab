@@ -1,0 +1,182 @@
+FSM:
+  _:
+    Passive:
+      id: 1
+    FixStand:
+      id: 2
+    Mimic_Compliant_Stand:
+      id: 5
+      type: Mimic
+  Passive:
+    transitions:
+      FixStand: LT + up.on_pressed
+    mode:
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    - 1
+    kd:
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+    - 3
+  FixStand:
+    transitions:
+      Passive: LT + B.on_pressed
+      Mimic_Compliant_Stand: RB + A.on_pressed
+    kp:
+    - 100.0
+    - 100.0
+    - 100.0
+    - 150.0
+    - 40.0
+    - 40.0
+    - 100.0
+    - 100.0
+    - 100.0
+    - 150.0
+    - 40.0
+    - 40.0
+    - 200
+    - 200
+    - 200
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    - 40
+    kd:
+    - 2
+    - 2
+    - 2
+    - 4
+    - 2
+    - 2
+    - 2
+    - 2
+    - 2
+    - 4
+    - 2
+    - 2
+    - 5
+    - 5
+    - 5
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    - 10
+    ts:
+    - 0
+    - 3
+    qs:
+    - []
+    - - -0.145926
+      - 0.094555
+      - 0.095544
+      - 0.290836
+      - -0.157019
+      - -0.039693
+      - -0.11979
+      - -0.026607
+      - -0.202988
+      - 0.263638
+      - -0.163883
+      - 0.031342
+      - 0.005877
+      - 0.0
+      - 0.0
+      - 0.3047
+      - 0.086903
+      - 0.052122
+      - 0.524493
+      - 0.808941
+      - 0.0
+      - 0.0
+      - 0.238896
+      - 0.027757
+      - -0.15556
+      - 0.591245
+      - -0.921814
+      - 0.0
+      - 0.0
+  Mimic_Compliant_Stand:
+    policy_dir: config/policy/compliant_mimic/stand
+    desired_stiffness: 200
+    desired_rotational_stiffness: 1
+    time_start: 0.0
+    time_end: 0.04
+    loop: true
+    limit_angle: 1.25
+    transitions:
+      Passive: LT + B.on_pressed
+    reference_csv: config/policy/compliant_mimic/stand/params/reference.csv
+    policy_watchdog_ms: 100

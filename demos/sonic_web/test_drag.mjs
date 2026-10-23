@@ -4,7 +4,7 @@ const base = new URL('./',import.meta.url);
 const three = new URL('lib/three/three.module.js',base).href;
 const dataURL = s => 'data:text/javascript;base64,'+Buffer.from(s).toString('base64');
 const orbit = dataURL(fs.readFileSync(new URL('lib/three/OrbitControls.js',base),'utf8').replace("from 'three'",`from '${three}'`));
-const source=fs.readFileSync(new URL('js/viewer.js',base),'utf8').replace("from 'three'",`from '${three}'`).replace("from 'three/addons/controls/OrbitControls.js'",`from '${orbit}'`);
+const source=fs.readFileSync(new URL('js/viewer.js',base),'utf8').replace("from './actuation.js'",`from '${new URL('js/actuation.js',base).href}'`).replace("from 'three'",`from '${three}'`).replace("from 'three/addons/controls/OrbitControls.js'",`from '${orbit}'`);
 const {MuJoCoViewer}=await import(dataURL(source));
 const {Vector3}=await import(three);
 const viewer=new MuJoCoViewer({});

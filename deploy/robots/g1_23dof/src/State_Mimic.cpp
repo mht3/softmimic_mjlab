@@ -4,6 +4,7 @@
 #include "isaaclab/envs/mdp/observations/observations.h"
 #include "isaaclab/envs/mdp/actions/joint_actions.h"
 
+#include "isaaclab/utils/fall_guard.h"
 #include <algorithm>
 #include <cmath>
 
@@ -107,27 +108,25 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
 
     auto articulation = std::make_shared<unitree::BaseArticulation<LowState_t::SharedPtr>>(FSMState::lowstate);
 
-    std::filesystem::path motion_file = cfg["motion_file"].as<std::string>();
-    if(!motion_file.is_absolute()) {
-        motion_file = param::proj_dir / motion_file;
+    auto deploy_cfg = YAML::LoadFile(policy_dir / "params" / "deploy.yaml");
+    const bool constant = deploy_cfg["reference_mode"] &&
+        deploy_cfg["reference_mode"].as<std::string>() == "constant_nominal";
+    std::filesystem::path motion_file;
+    time_range_ = {0.f, 0.f};
+    // Standing nominal channels are fully embedded in deploy.yaml. No ignored
+    // training NPZ is needed on a fresh clone or on the robot.
+    if (!constant) {
+        motion_file = cfg["motion_file"].as<std::string>();
+        if (!motion_file.is_absolute()) motion_file = param::proj_dir / motion_file;
+        motion_ = std::make_shared<MotionLoader_>(motion_file.string());
+        motion = motion_;
+        time_range_[0] = cfg["time_start"] ? cfg["time_start"].as<float>() : 0.f;
+        time_range_[1] = cfg["time_end"] ? cfg["time_end"].as<float>() : motion_->duration;
+        if (time_range_[0] < 0 || time_range_[1] <= time_range_[0] || time_range_[1] > motion_->duration)
+            throw std::runtime_error("Invalid reference playback range");
     }
-
-    // Motion
-    motion_ = std::make_shared<MotionLoader_>(motion_file.string());
-    spdlog::info("Loaded motion file '{}' with duration {:.2f}s", motion_file.stem().string(), motion_->duration);
-    motion = motion_;
-    if(cfg["time_start"]) {
-        float time_start = cfg["time_start"].as<float>();
-        time_range_[0] = std::clamp(time_start, 0.0f, motion_->duration);
-    } else {
-        time_range_[0] = 0.0f;
-    }
-    if(cfg["time_end"]) {
-        float time_end = cfg["time_end"].as<float>();
-        time_range_[1] = std::clamp(time_end, 0.0f, motion_->duration);
-    } else {
-        time_range_[1] = motion_->duration;
-    }
+    if (cfg["policy_watchdog_ms"]) watchdog_ms_ = cfg["policy_watchdog_ms"].as<int>();
+    if (watchdog_ms_ < 40 || watchdog_ms_ > 200) throw std::runtime_error("Policy watchdog must be 40..200 ms");
     std::string end_state = "Velocity";
     if (cfg["end_state"]) {
         end_state = cfg["end_state"].as<std::string>();
@@ -144,7 +143,6 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
     spdlog::info("Desired stiffness: {:.1f} N/m, rotational: {:.2f} Nm/rad",
                  desired_stiffness.load(), desired_rotational_stiffness.load());
 
-    auto deploy_cfg = YAML::LoadFile(policy_dir / "params" / "deploy.yaml");
     std::function<std::vector<float>(const std::string&)> reference_provider;
     if (deploy_cfg["reference_mode"] && deploy_cfg["reference_mode"].as<std::string>() == "nominal_motion") {
         auto nominal = std::make_shared<isaaclab::NominalMotion>(motion_file.string());
@@ -154,38 +152,48 @@ State_Mimic::State_Mimic(int state_mode, std::string state_string)
     env = std::make_unique<isaaclab::ManagerBasedRLEnv>(deploy_cfg, articulation, reference_provider);
     env->alg = std::make_unique<isaaclab::OrtRunner>(policy_dir / "exported" / "policy.onnx");
 
-    float limit_angle = 1.0f;
+
     if (cfg["limit_angle"]) {
-        limit_angle = cfg["limit_angle"].as<float>();
+        limit_angle_ = cfg["limit_angle"].as<float>();
     }
 
-    const auto & joy = FSMState::lowstate->joystick;
+    if (!std::isfinite(limit_angle_) || limit_angle_ <= 0 || limit_angle_ >= 3.14159265f)
+        throw std::runtime_error("Invalid fall cutoff angle");
+
     this->registered_checks.emplace_back(
         std::make_pair([this]()->bool { return policy_fault.load(); },
                        FSMStringMap.right.at("Passive"))
     );
-    if (!loop_) {
+    if (!loop_ && motion_) {
         this->registered_checks.emplace_back(
             std::make_pair(
-                [&]()->bool{ return (env->episode_length * env->step_dt) > time_range_[1]; }, // time out
+                [this]()->bool{ return motion_finished_.load(); }, // time out
                 FSMStringMap.right.at(end_state)
             )
         );
     }
-    this->registered_checks.emplace_back(
-        std::make_pair(
-            [this, limit_angle]()->bool{ return isaaclab::mdp::bad_orientation(env.get(), limit_angle); }, // bad orientation
-            FSMStringMap.right.at("Passive")
-        )
-    );
+
 }
 
 void State_Mimic::enter()
 {
     policy_fault = false;
-    // set gain
+    policy_ready_ = false;
+    motion_finished_ = false;
+    last_policy_ms_ = steady_ms();
+    try {
+        env->robot->update();
+        if (isaaclab::fallen_or_invalid(env->robot->data.root_quat_w, limit_angle_))
+            throw std::runtime_error("Robot is tilted beyond the fall cutoff");
+    } catch (const std::exception& error) {
+        spdlog::error("Invalid sensor state on policy entry: {}", error.what());
+        policy_fault = true;
+        return;
+    }
+    // Hold a validated measured pose until the first inference completes.
     for (int i = 0; i < env->robot->data.joint_stiffness.size(); i++)
     {
+        lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].q() = env->robot->data.joint_pos[i];
         lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].kp() = env->robot->data.joint_stiffness[i];
         lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].kd() = env->robot->data.joint_damping[i];
         lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].dq() = 0;
@@ -193,11 +201,11 @@ void State_Mimic::enter()
     }
 
     motion = motion_; // set for specific motion
-    env->reset();
+    env->action_manager->reset();
     // Start policy thread
     policy_thread_running = true;
     policy_thread = std::thread([this]{
-        using clock = std::chrono::high_resolution_clock;
+        using clock = std::chrono::steady_clock;
         const std::chrono::duration<double> desiredDuration(env->step_dt);
         const auto dt = std::chrono::duration_cast<clock::duration>(desiredDuration);
 
@@ -205,27 +213,31 @@ void State_Mimic::enter()
         const auto start = clock::now();
         auto sleepTill = start + dt;
 
-        motion->reset(env->robot->data, time_range_[0]);
-        auto ref_yaw = isaaclab::yawQuaternion(motion->root_quaternion()).toRotationMatrix();
-        auto robot_yaw = isaaclab::yawQuaternion(robot_quat_w(env.get())).toRotationMatrix();
-        init_quat = robot_yaw * ref_yaw.transpose();
-        env->reset();
-
+        try {
+            if (motion_) {
+                motion_->reset(env->robot->data, time_range_[0]);
+                auto ref_yaw = isaaclab::yawQuaternion(motion_->root_quaternion()).toRotationMatrix();
+                auto robot_yaw = isaaclab::yawQuaternion(robot_quat_w(env.get())).toRotationMatrix();
+                init_quat = robot_yaw * ref_yaw.transpose();
+            }
+            env->reset();
+        } catch (const std::exception& error) {
+            spdlog::error("Policy initialization failed: {}", error.what());
+            policy_fault = true;
+            return;
+        }
         while (policy_thread_running)
         {
-            env->robot->update();
-            float motion_time = env->episode_length * env->step_dt + time_range_[0];
-            if (loop_) {
-                // Wrap within [time_range_[0], time_range_[1]] so the clip replays
-                // seamlessly instead of freezing on the last frame.
-                float span = time_range_[1] - time_range_[0];
-                if (span > 1e-6f) {
-                    motion_time = time_range_[0] + std::fmod(env->episode_length * env->step_dt, span);
-                }
+            if (motion_) {
+                float motion_time = env->episode_length * env->step_dt + time_range_[0];
+                if (loop_) motion_time = time_range_[0] + std::fmod(env->episode_length * env->step_dt, time_range_[1] - time_range_[0]);
+                motion_->update(motion_time);
+                motion_finished_ = !loop_ && motion_time >= time_range_[1];
             }
-            motion->update(motion_time);
             try {
                 env->step();
+                last_policy_ms_ = steady_ms();
+                policy_ready_ = true;
             } catch (const std::exception& error) {
                 spdlog::error("Compliance policy failed; requesting Passive: {}", error.what());
                 policy_fault = true;
@@ -234,6 +246,8 @@ void State_Mimic::enter()
             }
 
             // Sleep
+            // Never replay a burst of stale history after an inference overrun.
+            if (clock::now() > sleepTill) sleepTill = clock::now() + dt;
             std::this_thread::sleep_until(sleepTill);
             sleepTill += dt;
         }
@@ -243,6 +257,28 @@ void State_Mimic::enter()
 
 void State_Mimic::run()
 {
+    // Check a fresh IMU snapshot in the command loop, before any policy target
+    // is published. Do not wait for inference or read its robot-state buffer.
+    Eigen::Quaternionf orientation;
+    {
+        std::lock_guard<std::mutex> lock(lowstate->mutex_);
+        const auto &q = lowstate->msg_.imu_state().quaternion();
+        orientation = Eigen::Quaternionf(q[0],q[1],q[2],q[3]);
+    }
+    if (isaaclab::fallen_or_invalid(orientation, limit_angle_)) {
+        if (!policy_fault.exchange(true)) spdlog::warn("Fall/invalid IMU detected; latching policy OFF and entering Passive");
+    }
+    if (lowstate->isTimeout() || steady_ms() - last_policy_ms_.load() > watchdog_ms_)
+        policy_fault = true;
+    if (policy_fault) {
+        policy_thread_running = false;
+        // Stop driving targets immediately, before the FSM publishes this tick.
+        for (auto id : env->robot->data.joint_ids_map) {
+            auto &motor = lowcmd->msg_.motor_cmd()[static_cast<int>(id)];
+            motor.q() = 0; motor.kp() = 0; motor.kd() = 3; motor.dq() = 0; motor.tau() = 0;
+        }
+        return;
+    }
     // Online stiffness adjustment (clamped to the SoftMimic training ranges).
     const auto & joy = FSMState::lowstate->joystick;
     if (joy.up.on_pressed) {
@@ -262,6 +298,7 @@ void State_Mimic::run()
         spdlog::info("desired_rotational_stiffness -> {:.2f} Nm/rad", desired_rotational_stiffness.load());
     }
 
+    if (!policy_ready_) return;
     auto action = env->action_manager->processed_actions();
     for(int i(0); i < env->robot->data.joint_ids_map.size(); i++) {
         lowcmd->msg_.motor_cmd()[env->robot->data.joint_ids_map[i]].q() = action[i];

@@ -8,7 +8,7 @@ The actor has 327 inputs and 23 outputs at 50 Hz. Its 13 observation terms each 
 
 The six nominal channels are joint pose, local root XY velocity, local yaw velocity, root height, gravity and foot contacts. Standing exports use `constant_nominal`; moving-reference exports use `nominal_motion` and a prepared 50 Hz nominal NPZ. See [motion support](../doc/STABILITY_AND_MOTION.md#moving-reference-support). A moving reference does not turn a standing policy into a motion tracker.
 
-The supported native runtime is `deploy/robots/g1_23dof`, with `State_Mimic`. Use the bundle's generated controller configuration after simulation validation. Do not mix this contract with the separate legacy 29DOF Python deployment path. Packaging never starts hardware or replaces the active robot configuration.
+The supported native runtime is `deploy/robots/g1_23dof`, with `State_Mimic`. The clone includes the matched Stable 24k bundle in `deploy/robots/g1_23dof/config/policy/compliant_mimic/stand` and a standing-only default controller configuration. For another trained bundle, use its generated controller configuration after simulation validation. Do not mix this contract with the separate legacy 29DOF Python deployment path. Packaging never starts hardware or replaces the active robot configuration.
 
 ## Validate a bundle
 
@@ -48,3 +48,7 @@ The launcher requires all three files and validates the pair before serving. Pol
 The browser uses implicit PD with exported gains and force limits. WASM precision, contact solving and the lack of training domain randomization can still differ from mjlab. `scripts/evaluate_browser_actuation.py` compares explicit and implicit PD using the same ONNX weights in native CPU MuJoCo; it does not itself test browser WASM or hardware.
 
 Evaluate unforced standing, hand pulls, downward loads, release recovery, repeated resets and commanded stiffness changes. Dataset geometry checks and interface parity do not certify balance, compliant behavior or hardware readiness. Follow [real-robot deployment](../deploy/README.md) only after behavioral evaluation.
+
+## Sensor realism
+
+The viewer now samples only pelvis orientation/gyro and joint encoders for live actor observations. Root position, root linear velocity, force arrows and actual contacts are not actor inputs. Nominal height/velocity/contacts remain reference commands. Training-range sensor noise is enabled by default, with optional 20/40 ms extra observation delay for stress tests. Turning noise off recovers deterministic interface comparison. Noise and delay are not hardware calibration. See [remaining sim-to-real differences](../deploy/SIM2REAL.md).

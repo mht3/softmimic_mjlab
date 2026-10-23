@@ -56,7 +56,7 @@ def main():
     onnx.helper.set_model_props(graph, {'checkpoint_iteration': str(a.iteration),
         'checkpoint_sha256': digest, 'robot': 'Unitree G1 23DOF',
         'reference_mode': deploy['reference_mode'],
-        'training_status': 'completed training' if a.final else 'intermediate checkpoint; training continues'})
+        'training_status': 'completed training' if a.final else 'intermediate checkpoint'})
     onnx.checker.check_model(graph)
     onnx.save(graph, target)
     session = ReferenceEvaluator(str(target))

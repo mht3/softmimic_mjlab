@@ -112,7 +112,7 @@ Open **[Compliant Humanoid](http://127.0.0.1:8088)**. A required nominal referen
 
 ![Fixed reference and physical robot in the policy player](doc/images/policy_player.png)
 
-Policy control starts **OFF**. Enable the matched ONNX policy, then press **Play**. Drag the robot to apply forces; drag the floor to orbit and scroll to zoom. Test standing, hand pulls, downward loads and release recovery before robot use. Physics without an enabled controller will let the robot fall. A changing or mismatched reference disables standing-policy control. See [player details](demos/sonic_web/README.md) for simulation differences.
+Policy control starts **OFF**. Enable the matched ONNX policy, then press **Play**. **Reset** or **R** restores the reference pose and enables the matched policy and physics, with playback paused until Play. Drag the robot to apply forces; drag the floor to orbit and scroll to zoom. Test standing, hand pulls, downward loads and release recovery before robot use. Physics without an enabled controller will let the robot fall. A changing or mismatched reference disables standing-policy control. See [player details](demos/sonic_web/README.md) for simulation differences.
 
 The policy receives nominal-reference channels and robot proprioception. External hand forces influence measured joint/root motion; the deployed actor does not receive an oracle measurement of your hand force. Dataset wrench labels supervise compliant targets during training. The stiffness sliders command learned compliance inputs, not raw motor PD gains.
 

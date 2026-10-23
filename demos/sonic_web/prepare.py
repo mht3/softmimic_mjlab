@@ -4,18 +4,21 @@ import argparse, hashlib, json, shutil, xml.etree.ElementTree as ET
 import numpy as np
 import yaml
 from reference import read_reference,validate_reference
+from contact_model import add_contact_arguments,configure_contacts
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 
 def main():
     p = argparse.ArgumentParser()
+    p.add_argument('--assets-dir',type=Path,default=HERE/'assets',help='Generated assets directory; use a separate directory for each preview')
     p.add_argument('--reference',type=Path,required=True,help='The nominal CSV used for training, not an augmented compliant target')
     p.add_argument('--reference-fps',type=float,default=30.)
     p.add_argument('--deploy', type=Path, help='Corrected run params/deploy.yaml')
     p.add_argument('--policy', type=Path, help='The same run exported policy.onnx')
     p.add_argument('--stiffness', type=float, default=200.)
     p.add_argument('--rotational-stiffness', type=float, default=1.)
+    add_contact_arguments(p)
     args = p.parse_args()
     if not (40 <= args.stiffness <= 1000 and .1 <= args.rotational_stiffness <= 10):
         p.error('Stiffness commands must stay within the training ranges')
@@ -44,7 +47,7 @@ def main():
         model=onnx.load(args.policy);onnx.checker.check_model(model)
         dimensions=lambda x:[d.dim_value for d in x.type.tensor_type.shape.dim]
         if len(model.graph.input)!=1 or len(model.graph.output)!=1 or dimensions(model.graph.input[0])!=[1,327] or dimensions(model.graph.output[0])!=[1,23]:raise ValueError('Incompatible ONNX dimensions')
-    assets = HERE / 'assets'
+    assets = args.assets_dir.resolve()
     robot = assets / 'robot'
     (robot / 'meshes').mkdir(parents=True, exist_ok=True)
     source = REPO / 'src/assets/robots/unitree_g1/xmls/g1_23dof.xml'
@@ -72,20 +75,14 @@ def main():
         else:
             ET.SubElement(actuators, 'motor', name=name, joint=name, ctrllimited='true', ctrlrange=f'-{limit} {limit}')
         effort.append(limit)
-    # Same collision masks as get_g1_23dof_robot_cfg(gains='softmimic').
-    for g in root.findall('.//worldbody//geom'):
-        name = g.get('name', '')
-        if name.endswith('_collision'):
-            foot = '_foot' in name
-            g.attrib.update(contype='0', conaffinity='1', condim='3' if foot else '1')
-            if foot: g.set('friction','0.6 0.005 0.0001')
+    contact_model = configure_contacts(root,args.contact_profile,args.body_friction)
     for mesh in root.findall('./asset/mesh'):
         f = mesh.attrib['file']; shutil.copy2(source.parent/'assets'/f, robot/'meshes'/f)
     ET.indent(tree); tree.write(robot/'scene.xml')
     (assets/'motions').mkdir(exist_ok=True)
     (assets/'motions/stand.json').write_text(json.dumps(motion))
     (assets/'motions/index.json').write_text(json.dumps([dict(id='stand',display=motion['name'],frames=motion['frames'],fps=motion['fps'])]))
-    (assets/'robot/contract.json').write_text(json.dumps(dict(joint_names=[j.get('name') for j in joints],effort_limits=effort,step_dt=.02,substeps=4,actuation='implicit_pd' if deploy_cfg else 'torque')))
+    (assets/'robot/contract.json').write_text(json.dumps(dict(joint_names=[j.get('name') for j in joints],effort_limits=effort,step_dt=.02,substeps=4,actuation='implicit_pd' if deploy_cfg else 'torque',contacts=contact_model)))
     if args.policy:
         import onnx
         c = yaml.safe_load(args.deploy.read_text())
@@ -99,6 +96,10 @@ def main():
         validate_reference(motion,c)
         c['effort_limits']=effort
         c['actuation']='implicit_pd'
+        controller=args.deploy.parent.parent/'controller_config.yaml'
+        native=yaml.safe_load(controller.read_text())['FSM']['Mimic_Compliant_Stand'] if controller.exists() else {}
+        c['fall_detection']={'limit_angle':float(native.get('limit_angle',1.25)), 'passive_damping':3.}
+        if not 0<c['fall_detection']['limit_angle']<np.pi:raise ValueError('Invalid fall detection angle')
         c['stiffness_command']=args.stiffness; c['rotational_stiffness_command']=args.rotational_stiffness
         c['source_policy_sha256']=hashlib.sha256(args.policy.read_bytes()).hexdigest()
         c['source_policy']=str(args.policy)

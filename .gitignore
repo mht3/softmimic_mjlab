@@ -41,3 +41,12 @@ demos/policies/**/*.onnx
 /demos/policies/*/controller_config.yaml
 /demos/policies/*/fsm_patch.yaml
 /demos/policies/*/README.txt
+
+# Matched native standing controller: these three inputs must ship in clones.
+!/deploy/robots/g1_23dof/config/policy/compliant_mimic/stand/exported/policy.onnx
+!/deploy/robots/g1_23dof/config/policy/compliant_mimic/stand/params/deploy.yaml
+!/deploy/robots/g1_23dof/config/policy/compliant_mimic/stand/params/reference.csv
+
+# Superseded local preview screenshots; the current README example is versioned.
+/doc/images/deployment_14000.png
+/doc/images/deployment_15000.png

@@ -40,20 +40,20 @@ conda activate unitree_rl_mjlab
 
 ```bash
 python demos/sonic_web/serve.py --port 8088 \
-  --reference datasets/streamer/stand.csv \
-  --deploy demos/policies/stand_20000/params/deploy.yaml \
-  --policy demos/policies/stand_20000/exported/policy.onnx
+  --reference deploy/robots/g1_23dof/config/policy/compliant_mimic/stand/params/reference.csv \
+  --deploy deploy/robots/g1_23dof/config/policy/compliant_mimic/stand/params/deploy.yaml \
+  --policy deploy/robots/g1_23dof/config/policy/compliant_mimic/stand/exported/policy.onnx
 ```
 
-Open **[Compliant Humanoid](http://127.0.0.1:8088)** in a modern desktop browser. The launch command validates all three files and rebuilds viewer assets from the included ONNX, source meshes and standing CSV. Enable **Trained ONNX policy**, then press **Play**. Drag the robot to apply forces; reset or scrub the fixed reference below. The cyan ghost shows the nominal pose.
+Open **[Compliant Humanoid](http://127.0.0.1:8088)** in a modern desktop browser. The launch command validates all three files and rebuilds viewer assets from the included ONNX, source meshes and standing CSV. Enable **Trained ONNX policy**, then press **Play**. **Reset** or **R** restores the pose and turns policy/physics ON, with playback paused until Play. Drag the robot to apply forces; reset or scrub the fixed reference below. The cyan ghost shows the nominal pose.
 
-The included model completed **20,000 training iterations** (checkpoint `model_19999.pt`). Its PyTorch/ONNX and browser/C++ interface checks pass; these do not certify balance, compliance performance or hardware safety. See the [model record](demos/policies/stand_20000/README.md).
+The demo and default hardware configuration use the matched **Stable checkpoint 24,000**, including its ONNX, deployment YAML and standing CSV. It was selected from 28 checkpoints: 30/30 standing/recovery tests passed, with lower noisy wrist motion than 15k ([results](doc/WRIST_NOISE_REVIEW.md)). Run `python deploy/check_bundle.py` to verify the included files offline. The 25,000-iteration run is complete; its final checkpoint passed 26/30 recovery tests, so 24k remains selected. Simulation and interface checks do not establish hardware performance.
 
-![Compliant Humanoid physics player](doc/images/policy_player.png)
+![Compliant Humanoid physics player](doc/images/deployment_24000.png)
 
 ## Create a reference → train → deploy
 
-Only the small `datasets/streamer/stand.csv` input is versioned. Generated IK CSV/NPZ pairs, prepared references, audits, staging/backup directories and legacy motion libraries are local and ignored. Recreate the supported dataset with step 2; its complete audit runs before installation. Generated viewer assets are also ignored and rebuilt by the quickstart above. The published 20k ONNX and matching deployment configuration remain included.
+The small `datasets/streamer/stand.csv` input and the matched deployment reference CSV are versioned. Generated IK CSV/NPZ pairs, prepared references, audits, staging/backup directories and legacy motion libraries are local and ignored. Recreate the supported dataset with step 2; its complete audit runs before installation. Generated viewer assets are also ignored and rebuilt by the quickstart above. The demo and deployment ONNX files and matching deployment configurations remain included.
 
 1. Follow [training setup](doc/setup_en.md) and activate `unitree_rl_mjlab`. For text generation, also follow [ARDY setup](demos/ardy_web/SETUP.md), then run:
    ```bash

@@ -1,6 +1,6 @@
 """Exercise the real C++ observation/action/ONNX managers without DDS or a robot."""
 from pathlib import Path
-import argparse,subprocess,tempfile,re,json
+import argparse,subprocess,tempfile,re,json,sys
 import numpy as np,yaml
 from onnx.reference import ReferenceEvaluator
 ROOT=Path(__file__).resolve().parents[1]
@@ -79,7 +79,10 @@ with tempfile.TemporaryDirectory() as d:
  got=yaml.safe_load(subprocess.check_output([str(d/'test'),str(bundle/'params/deploy.yaml'),str(bundle/'exported/policy.onnx'),str(d/'fixture.yaml')]))
  # The browser adapter produces the comparison observations and targets.
  c.update(effort_limits=[88,88,88,139,50,50]*2+[88]+[25]*10,stiffness_command=meta['stiffness'],rotational_stiffness_command=meta['rotational_stiffness'])
- (d/'fixture.json').write_text(json.dumps(dict(config=c,frames=frames,reference=json.loads((bundle/'params/reference.json').read_text()))))
+ sys.path.insert(0,str(ROOT/'demos/sonic_web'))
+ from reference import read_reference
+ reference=json.loads((bundle/'params/reference.json').read_text()) if (bundle/'params/reference.json').exists() else read_reference(bundle/'params/reference.csv')
+ (d/'fixture.json').write_text(json.dumps(dict(config=c,frames=frames,reference=reference)))
  module=(Path(__file__).parent/'sonic_web/js/policy.js').resolve().as_uri()
  js="import fs from 'node:fs';import {SoftMimicPolicy} from "+json.dumps(module)+";const f=JSON.parse(fs.readFileSync(process.argv[1]));const p=new SoftMimicPolicy();p.configure(f.config);console.log(JSON.stringify(f.frames.map(x=>{if(x.reset)p.reset();p.lastAction=p.boundAction(x.action);p.pushHistory(x.q,x.v,f.reference,x.reference_frame*.02);return Array.from(p.observation)})));"
  expected=json.loads(subprocess.check_output(['node','--input-type=module','-e',js,str(d/'fixture.json')]))

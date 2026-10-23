@@ -1,0 +1,4565 @@
+{
+  "protocol": {
+    "duration_s": 30,
+    "noise_seeds": [
+      42,
+      43,
+      44
+    ],
+    "contacts": "frictional-body",
+    "body_friction": 0.5,
+    "foot_friction": 0.6,
+    "forces_world_N": {
+      "none": {},
+      "left_pull": {
+        "left_palm": [
+          0.0,
+          20.0,
+          0.0
+        ]
+      },
+      "right_pull": {
+        "right_palm": [
+          0.0,
+          -20.0,
+          0.0
+        ]
+      },
+      "downward": {
+        "left_palm": [
+          0.0,
+          0.0,
+          -30.0
+        ],
+        "right_palm": [
+          0.0,
+          0.0,
+          -30.0
+        ]
+      }
+    },
+    "load_window_s": [
+      5,
+      9
+    ],
+    "ramp_s": 1,
+    "hold_s": 2,
+    "compliance_N_m": 200,
+    "rotational_compliance_Nm_rad": 1,
+    "recovery_baseline_s": [
+      3,
+      5
+    ],
+    "recovery_final_s": [
+      25,
+      30
+    ],
+    "recovery_limits": {
+      "root_height_error_m": 0.05,
+      "root_xy_drift_m": 0.15,
+      "maximum_palm_error_m": 0.08,
+      "mean_final_tilt_rad": 0.2
+    },
+    "fall_tilt_rad": 1.25,
+    "collapse_height_m": 0.3,
+    "selection": "All 16 basic trials must pass survival and recovery; rank mean noisy unforced wrist RMS, then action-rate RMS. Compare to baseline.",
+    "caveat": "Finite native CPU MuJoCo tests; no hardware validation or guarantee for stronger/different loads."
+  },
+  "candidates": [
+    {
+      "iteration": 15000,
+      "onnx_sha256": "9f6402f3a995aee4f538fe8173f0e6adaf3d83a2c1652444232a8d9e0c513e7f",
+      "basic": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 4.9442870107996306e-05,
+            "root_xy_drift_m": 0.0009310405762140723,
+            "maximum_palm_error_m": 0.0032211296100123025,
+            "mean_final_tilt_rad": 0.05799249530760777
+          },
+          "maximum_tilt_rad": 0.08721501590186562,
+          "minimum_root_height_m": 0.783999335332929,
+          "wrist_speed_rms_rad_s": 0.11485050529380778,
+          "wrist_action_rate_rms": 4.07727421986601,
+          "max_raw_action": 2.9014930725097656,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0003891181911543917,
+            "root_xy_drift_m": 0.01120302893954958,
+            "maximum_palm_error_m": 0.01294789385790641,
+            "mean_final_tilt_rad": 0.06514409541389926
+          },
+          "maximum_tilt_rad": 0.0872281369189242,
+          "minimum_root_height_m": 0.7823924189767224,
+          "wrist_speed_rms_rad_s": 0.45115467220761135,
+          "wrist_action_rate_rms": 12.901160825514504,
+          "max_raw_action": 3.011050224304199,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0003874787256185064,
+            "root_xy_drift_m": 0.005656873299221442,
+            "maximum_palm_error_m": 0.014287150035337023,
+            "mean_final_tilt_rad": 0.06445951389848824
+          },
+          "maximum_tilt_rad": 0.0909067651952775,
+          "minimum_root_height_m": 0.7829109109070844,
+          "wrist_speed_rms_rad_s": 0.4315372667945932,
+          "wrist_action_rate_rms": 12.377771191100518,
+          "max_raw_action": 2.7181506156921387,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00032145270554906347,
+            "root_xy_drift_m": 0.022412677223248488,
+            "maximum_palm_error_m": 0.024538133875992074,
+            "mean_final_tilt_rad": 0.06184760875885174
+          },
+          "maximum_tilt_rad": 0.0851218280164884,
+          "minimum_root_height_m": 0.7831384904745622,
+          "wrist_speed_rms_rad_s": 0.4465943770183335,
+          "wrist_action_rate_rms": 12.695299726607722,
+          "max_raw_action": 2.8033766746520996,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5528768629690669,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0001001284297555971,
+            "root_xy_drift_m": 0.002575883201471917,
+            "maximum_palm_error_m": 0.0031558927992897407,
+            "mean_final_tilt_rad": 0.05806888153881308
+          },
+          "maximum_tilt_rad": 0.1462089329157872,
+          "minimum_root_height_m": 0.7513806890948092,
+          "wrist_speed_rms_rad_s": 0.18649033582000463,
+          "wrist_action_rate_rms": 4.145294976717095,
+          "max_raw_action": 2.9014930725097656,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5580209445139097,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00037717882579635376,
+            "root_xy_drift_m": 0.04245494292674111,
+            "maximum_palm_error_m": 0.05119539902734101,
+            "mean_final_tilt_rad": 0.06497593828553595
+          },
+          "maximum_tilt_rad": 0.14658721679839723,
+          "minimum_root_height_m": 0.7508520416091601,
+          "wrist_speed_rms_rad_s": 0.5054368031977431,
+          "wrist_action_rate_rms": 13.263802397600879,
+          "max_raw_action": 3.011050224304199,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5595640500399567,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0003907215816094656,
+            "root_xy_drift_m": 0.031570601273868716,
+            "maximum_palm_error_m": 0.03383433533622166,
+            "mean_final_tilt_rad": 0.0644254058506363
+          },
+          "maximum_tilt_rad": 0.1506165913566953,
+          "minimum_root_height_m": 0.7449505859116894,
+          "wrist_speed_rms_rad_s": 0.48337707158869675,
+          "wrist_action_rate_rms": 12.942664288258749,
+          "max_raw_action": 2.7181506156921387,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5578538997504618,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0002743298913914227,
+            "root_xy_drift_m": 0.040764673934843745,
+            "maximum_palm_error_m": 0.04816963931900604,
+            "mean_final_tilt_rad": 0.06144707151576037
+          },
+          "maximum_tilt_rad": 0.17432190843016585,
+          "minimum_root_height_m": 0.7412978760089438,
+          "wrist_speed_rms_rad_s": 0.5063128867508407,
+          "wrist_action_rate_rms": 13.336981494488315,
+          "max_raw_action": 3.001979112625122,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5601145785810151,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00015422005079990253,
+            "root_xy_drift_m": 0.003073020963874199,
+            "maximum_palm_error_m": 0.00853903135671377,
+            "mean_final_tilt_rad": 0.05868795861354826
+          },
+          "maximum_tilt_rad": 0.08721501590186562,
+          "minimum_root_height_m": 0.7443251227384294,
+          "wrist_speed_rms_rad_s": 0.2326475167378203,
+          "wrist_action_rate_rms": 4.139077871807507,
+          "max_raw_action": 2.9014930725097656,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.55925607424573,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.000428943977981322,
+            "root_xy_drift_m": 0.01613528620233712,
+            "maximum_palm_error_m": 0.021056366511015945,
+            "mean_final_tilt_rad": 0.06552213315076288
+          },
+          "maximum_tilt_rad": 0.0872281369189242,
+          "minimum_root_height_m": 0.7509037537697101,
+          "wrist_speed_rms_rad_s": 0.4992004892724324,
+          "wrist_action_rate_rms": 12.943492776403424,
+          "max_raw_action": 3.011050224304199,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5569548299664958,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0003769947403210461,
+            "root_xy_drift_m": 0.013908504313375272,
+            "maximum_palm_error_m": 0.015958426437258026,
+            "mean_final_tilt_rad": 0.06453304280457048
+          },
+          "maximum_tilt_rad": 0.0909067651952775,
+          "minimum_root_height_m": 0.7408019630402695,
+          "wrist_speed_rms_rad_s": 0.495070693559572,
+          "wrist_action_rate_rms": 12.480913322236558,
+          "max_raw_action": 2.7181506156921387,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5597460236267581,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00030325831574440354,
+            "root_xy_drift_m": 0.037606927685788355,
+            "maximum_palm_error_m": 0.04084668023151673,
+            "mean_final_tilt_rad": 0.06167099983727591
+          },
+          "maximum_tilt_rad": 0.08948672774289465,
+          "minimum_root_height_m": 0.743287492842091,
+          "wrist_speed_rms_rad_s": 0.5118810228219821,
+          "wrist_action_rate_rms": 12.870131626985623,
+          "max_raw_action": 2.9078621864318848,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5629508130804509,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00019224636496273373,
+            "root_xy_drift_m": 0.005829006248206334,
+            "maximum_palm_error_m": 0.009402945525599851,
+            "mean_final_tilt_rad": 0.05891409886050848
+          },
+          "maximum_tilt_rad": 0.12048133892799236,
+          "minimum_root_height_m": 0.7348949641956484,
+          "wrist_speed_rms_rad_s": 0.157061653186171,
+          "wrist_action_rate_rms": 4.109132674428078,
+          "max_raw_action": 2.9014930725097656,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5767701079301204,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0004115476201244084,
+            "root_xy_drift_m": 0.026640092729159365,
+            "maximum_palm_error_m": 0.03112047864411046,
+            "mean_final_tilt_rad": 0.06558108370670847
+          },
+          "maximum_tilt_rad": 0.11222809593290954,
+          "minimum_root_height_m": 0.7241249628341428,
+          "wrist_speed_rms_rad_s": 0.478696396411867,
+          "wrist_action_rate_rms": 12.792309947750903,
+          "max_raw_action": 3.011050224304199,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5642917636300692,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00039761252863534935,
+            "root_xy_drift_m": 0.027771476521591808,
+            "maximum_palm_error_m": 0.029426450894992736,
+            "mean_final_tilt_rad": 0.06451339621060365
+          },
+          "maximum_tilt_rad": 0.12334693176625616,
+          "minimum_root_height_m": 0.7146592103715971,
+          "wrist_speed_rms_rad_s": 0.45653587050868893,
+          "wrist_action_rate_rms": 12.465115207792492,
+          "max_raw_action": 2.7181506156921387,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5649855496401124,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00036680448333181737,
+            "root_xy_drift_m": 0.03502796495487639,
+            "maximum_palm_error_m": 0.04998301369645085,
+            "mean_final_tilt_rad": 0.06248598170646302
+          },
+          "maximum_tilt_rad": 0.12016614918678094,
+          "minimum_root_height_m": 0.72470978012682,
+          "wrist_speed_rms_rad_s": 0.4868896117422594,
+          "wrist_action_rate_rms": 12.881120367571533,
+          "max_raw_action": 2.8421170711517334,
+          "passed": true
+        }
+      ],
+      "stress": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 20,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0004557283872448359,
+            "root_xy_drift_m": 0.015811700297095763,
+            "maximum_palm_error_m": 0.048206996524159336,
+            "mean_final_tilt_rad": 0.06686358750869256
+          },
+          "maximum_tilt_rad": 0.09246922846097551,
+          "minimum_root_height_m": 0.7827943432540729,
+          "wrist_speed_rms_rad_s": 0.5041976472065764,
+          "wrist_action_rate_rms": 13.176970089979323,
+          "max_raw_action": 3.011050224304199
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 40,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00015501415581653522,
+            "root_xy_drift_m": 0.12226930345389819,
+            "maximum_palm_error_m": 0.1434300690580561,
+            "mean_final_tilt_rad": 0.062294565722158315
+          },
+          "maximum_tilt_rad": 0.10964812737561283,
+          "minimum_root_height_m": 0.7827371383128784,
+          "wrist_speed_rms_rad_s": 0.6422645469252509,
+          "wrist_action_rate_rms": 14.233527826671034,
+          "max_raw_action": 3.011050224304199
+        }
+      ],
+      "parity": [
+        {
+          "contacts": {
+            "profile": "training",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.0,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0003891181911543917,
+            "root_xy_drift_m": 0.01120302893954958,
+            "maximum_palm_error_m": 0.01294789385790641,
+            "mean_final_tilt_rad": 0.06514409541389926
+          },
+          "maximum_tilt_rad": 0.0872281369189242,
+          "minimum_root_height_m": 0.7823924189767224,
+          "wrist_speed_rms_rad_s": 0.45115467220761135,
+          "wrist_action_rate_rms": 12.901160825514504,
+          "max_raw_action": 3.011050224304199
+        }
+      ],
+      "basic_passes": 16,
+      "noisy_standing_wrist_rms": 0.44309543867351264,
+      "noisy_standing_action_rate_rms": 12.658077247740914
+    },
+    {
+      "iteration": 18000,
+      "onnx_sha256": "43658415877f8f67ef73c944a4af0eb004874acf9172a028aa4e05a4c195e70c",
+      "basic": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00011772509107754736,
+            "root_xy_drift_m": 0.003955341302360474,
+            "maximum_palm_error_m": 0.007960858833138209,
+            "mean_final_tilt_rad": 0.058412956468249407
+          },
+          "maximum_tilt_rad": 0.08690006555546138,
+          "minimum_root_height_m": 0.7841261662503417,
+          "wrist_speed_rms_rad_s": 0.11440459275863318,
+          "wrist_action_rate_rms": 4.077363291918535,
+          "max_raw_action": 2.9752731323242188,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00031109275617935417,
+            "root_xy_drift_m": 0.019191142362638726,
+            "maximum_palm_error_m": 0.022835412028913992,
+            "mean_final_tilt_rad": 0.06129645348687603
+          },
+          "maximum_tilt_rad": 0.09064073085430216,
+          "minimum_root_height_m": 0.7821698703168736,
+          "wrist_speed_rms_rad_s": 0.5187329523848899,
+          "wrist_action_rate_rms": 14.043197788513565,
+          "max_raw_action": 3.112252950668335,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0004685325137634422,
+            "root_xy_drift_m": 0.014961280890623846,
+            "maximum_palm_error_m": 0.01713091580916221,
+            "mean_final_tilt_rad": 0.06199859927847886
+          },
+          "maximum_tilt_rad": 0.09192690725308589,
+          "minimum_root_height_m": 0.782559036167332,
+          "wrist_speed_rms_rad_s": 0.48532894653291,
+          "wrist_action_rate_rms": 13.188826666541175,
+          "max_raw_action": 3.0643045902252197,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 6.828460766972189e-05,
+            "root_xy_drift_m": 0.026054382660706976,
+            "maximum_palm_error_m": 0.029003416737613964,
+            "mean_final_tilt_rad": 0.05915675301280193
+          },
+          "maximum_tilt_rad": 0.08367979185214412,
+          "minimum_root_height_m": 0.7825442172222605,
+          "wrist_speed_rms_rad_s": 0.5099276925485778,
+          "wrist_action_rate_rms": 13.717164844774787,
+          "max_raw_action": 2.7648561000823975,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5506537848240284,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00029225450387537766,
+            "root_xy_drift_m": 0.009742737880085178,
+            "maximum_palm_error_m": 0.02877581229205585,
+            "mean_final_tilt_rad": 0.053977082017521306
+          },
+          "maximum_tilt_rad": 0.15594331010016033,
+          "minimum_root_height_m": 0.7336880712421923,
+          "wrist_speed_rms_rad_s": 0.407615099753316,
+          "wrist_action_rate_rms": 4.71216076098633,
+          "max_raw_action": 3.0713610649108887,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5524788186826605,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00035618939099824054,
+            "root_xy_drift_m": 0.025447926783383222,
+            "maximum_palm_error_m": 0.031317553489646835,
+            "mean_final_tilt_rad": 0.060491776364024516
+          },
+          "maximum_tilt_rad": 0.14868514975825023,
+          "minimum_root_height_m": 0.7401616719022541,
+          "wrist_speed_rms_rad_s": 0.6385482748908158,
+          "wrist_action_rate_rms": 14.464011395945152,
+          "max_raw_action": 3.112252950668335,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.554611516752596,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0004911686726796205,
+            "root_xy_drift_m": 0.0519142640181366,
+            "maximum_palm_error_m": 0.053308785219914695,
+            "mean_final_tilt_rad": 0.06191745118686644
+          },
+          "maximum_tilt_rad": 0.17647118417410204,
+          "minimum_root_height_m": 0.726461440643093,
+          "wrist_speed_rms_rad_s": 0.6241318520026292,
+          "wrist_action_rate_rms": 13.637852188774698,
+          "max_raw_action": 4.682007312774658,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5480940536010247,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 7.677517349735652e-05,
+            "root_xy_drift_m": 0.05011828412267596,
+            "maximum_palm_error_m": 0.06537912875613858,
+            "mean_final_tilt_rad": 0.05825636884288386
+          },
+          "maximum_tilt_rad": 0.15112176827436646,
+          "minimum_root_height_m": 0.7412147059428991,
+          "wrist_speed_rms_rad_s": 0.6147474079196603,
+          "wrist_action_rate_rms": 13.982276622395485,
+          "max_raw_action": 4.226107120513916,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5579726647658556,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00022031158440327658,
+            "root_xy_drift_m": 0.005858374342382471,
+            "maximum_palm_error_m": 0.006811637678125595,
+            "mean_final_tilt_rad": 0.05869981100938963
+          },
+          "maximum_tilt_rad": 0.08690006555546138,
+          "minimum_root_height_m": 0.7792233972214924,
+          "wrist_speed_rms_rad_s": 0.22829826465455083,
+          "wrist_action_rate_rms": 4.157495079301655,
+          "max_raw_action": 2.9752731323242188,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5592840616474593,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00031568683753369076,
+            "root_xy_drift_m": 0.01993580798203839,
+            "maximum_palm_error_m": 0.028585216876770247,
+            "mean_final_tilt_rad": 0.06088393834899311
+          },
+          "maximum_tilt_rad": 0.09064073085430216,
+          "minimum_root_height_m": 0.7790527155123892,
+          "wrist_speed_rms_rad_s": 0.567443001025682,
+          "wrist_action_rate_rms": 14.335611802574492,
+          "max_raw_action": 3.112252950668335,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5568871628860282,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0004860967467853472,
+            "root_xy_drift_m": 0.018893825810410186,
+            "maximum_palm_error_m": 0.019961830771277,
+            "mean_final_tilt_rad": 0.06198892859961565
+          },
+          "maximum_tilt_rad": 0.09192690725308589,
+          "minimum_root_height_m": 0.777706698484269,
+          "wrist_speed_rms_rad_s": 0.5499742644000494,
+          "wrist_action_rate_rms": 13.559998001475568,
+          "max_raw_action": 3.0643045902252197,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5592879313294344,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 9.364930339250677e-05,
+            "root_xy_drift_m": 0.02792506550066902,
+            "maximum_palm_error_m": 0.03107878454433157,
+            "mean_final_tilt_rad": 0.05836033762228402
+          },
+          "maximum_tilt_rad": 0.09464817026959134,
+          "minimum_root_height_m": 0.7776442149594176,
+          "wrist_speed_rms_rad_s": 0.5623335472440945,
+          "wrist_action_rate_rms": 13.916488214786382,
+          "max_raw_action": 2.7648561000823975,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.545390715892673,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0001570790764335861,
+            "root_xy_drift_m": 0.00407984871305494,
+            "maximum_palm_error_m": 0.008306577614038349,
+            "mean_final_tilt_rad": 0.05785716381649476
+          },
+          "maximum_tilt_rad": 0.10420289007094909,
+          "minimum_root_height_m": 0.7791679936166055,
+          "wrist_speed_rms_rad_s": 0.11524988327630249,
+          "wrist_action_rate_rms": 4.077544119762948,
+          "max_raw_action": 2.9752731323242188,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5630122473533803,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00034999300600679906,
+            "root_xy_drift_m": 0.052485579104980286,
+            "maximum_palm_error_m": 0.058485570630299744,
+            "mean_final_tilt_rad": 0.060987705963211604
+          },
+          "maximum_tilt_rad": 0.12305080092664418,
+          "minimum_root_height_m": 0.7758168198640665,
+          "wrist_speed_rms_rad_s": 0.5650786368198661,
+          "wrist_action_rate_rms": 14.754959157029605,
+          "max_raw_action": 5.624705791473389,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5647929421944428,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00048293559140433207,
+            "root_xy_drift_m": 0.03809477214298542,
+            "maximum_palm_error_m": 0.03817266931567461,
+            "mean_final_tilt_rad": 0.062007180973083234
+          },
+          "maximum_tilt_rad": 0.1216867338821631,
+          "minimum_root_height_m": 0.767670577355846,
+          "wrist_speed_rms_rad_s": 0.4977305285956529,
+          "wrist_action_rate_rms": 13.323566594101338,
+          "max_raw_action": 3.0643045902252197,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5507710519912327,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 9.057477063689756e-05,
+            "root_xy_drift_m": 0.016227299532975047,
+            "maximum_palm_error_m": 0.03889400762187952,
+            "mean_final_tilt_rad": 0.05825695278694704
+          },
+          "maximum_tilt_rad": 0.12883957114154393,
+          "minimum_root_height_m": 0.7702296731326969,
+          "wrist_speed_rms_rad_s": 0.5548494005911164,
+          "wrist_action_rate_rms": 14.36397593315376,
+          "max_raw_action": 4.143021583557129,
+          "passed": true
+        }
+      ],
+      "stress": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 20,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.000295145541509223,
+            "root_xy_drift_m": 0.021960037190311674,
+            "maximum_palm_error_m": 0.030701544513119176,
+            "mean_final_tilt_rad": 0.05893756569578496
+          },
+          "maximum_tilt_rad": 0.09452280453477355,
+          "minimum_root_height_m": 0.7822002495128327,
+          "wrist_speed_rms_rad_s": 0.5170518117532266,
+          "wrist_action_rate_rms": 13.631703760938544,
+          "max_raw_action": 3.1205735206604004
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 40,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00014326206029635635,
+            "root_xy_drift_m": 0.02686968799963882,
+            "maximum_palm_error_m": 0.028644858739333368,
+            "mean_final_tilt_rad": 0.05808361130265798
+          },
+          "maximum_tilt_rad": 0.09861420740741345,
+          "minimum_root_height_m": 0.7816122848437093,
+          "wrist_speed_rms_rad_s": 0.5577866530639627,
+          "wrist_action_rate_rms": 14.312771728320156,
+          "max_raw_action": 3.1205735206604004
+        }
+      ],
+      "parity": [
+        {
+          "contacts": {
+            "profile": "training",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.0,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00031109275617935417,
+            "root_xy_drift_m": 0.019191142362638726,
+            "maximum_palm_error_m": 0.022835412028913992,
+            "mean_final_tilt_rad": 0.06129645348687603
+          },
+          "maximum_tilt_rad": 0.09064073085430216,
+          "minimum_root_height_m": 0.7821698703168736,
+          "wrist_speed_rms_rad_s": 0.5187329523848899,
+          "wrist_action_rate_rms": 14.043197788513565,
+          "max_raw_action": 3.112252950668335
+        }
+      ],
+      "basic_passes": 16,
+      "noisy_standing_wrist_rms": 0.5046631971554593,
+      "noisy_standing_action_rate_rms": 13.649729766609843
+    },
+    {
+      "iteration": 18500,
+      "onnx_sha256": "b9b08917345b46cb28e38c9d26a050530c059bbb3722afc8be317c34e25da7e2",
+      "basic": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00012468280985356017,
+            "root_xy_drift_m": 0.00041317696000138504,
+            "maximum_palm_error_m": 0.005908791517308522,
+            "mean_final_tilt_rad": 0.057155229751617444
+          },
+          "maximum_tilt_rad": 0.08556179456448203,
+          "minimum_root_height_m": 0.784086266925788,
+          "wrist_speed_rms_rad_s": 0.10166732061502969,
+          "wrist_action_rate_rms": 3.8242183344246947,
+          "max_raw_action": 3.101677179336548,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00018602610557028054,
+            "root_xy_drift_m": 0.025518573886300414,
+            "maximum_palm_error_m": 0.029811153441664833,
+            "mean_final_tilt_rad": 0.06316398932168672
+          },
+          "maximum_tilt_rad": 0.08480558360455512,
+          "minimum_root_height_m": 0.7837830582925626,
+          "wrist_speed_rms_rad_s": 0.5039098151355177,
+          "wrist_action_rate_rms": 14.049614155276181,
+          "max_raw_action": 3.191464900970459,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0002251936343760086,
+            "root_xy_drift_m": 0.02106778539627522,
+            "maximum_palm_error_m": 0.03345442033069516,
+            "mean_final_tilt_rad": 0.06297799131535763
+          },
+          "maximum_tilt_rad": 0.09014936770549843,
+          "minimum_root_height_m": 0.7838748119585955,
+          "wrist_speed_rms_rad_s": 0.48836655916895716,
+          "wrist_action_rate_rms": 13.633755737562458,
+          "max_raw_action": 3.0051193237304688,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 3.012744186092764e-05,
+            "root_xy_drift_m": 0.022387695252589344,
+            "maximum_palm_error_m": 0.03247935191891259,
+            "mean_final_tilt_rad": 0.06175822904070885
+          },
+          "maximum_tilt_rad": 0.0835582077063376,
+          "minimum_root_height_m": 0.783767292174109,
+          "wrist_speed_rms_rad_s": 0.4976101228660714,
+          "wrist_action_rate_rms": 13.851159645286408,
+          "max_raw_action": 3.031128168106079,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5561219143938991,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00014459822012535817,
+            "root_xy_drift_m": 0.008421604755894006,
+            "maximum_palm_error_m": 0.015224994889692492,
+            "mean_final_tilt_rad": 0.05510955930126491
+          },
+          "maximum_tilt_rad": 0.15567098200334242,
+          "minimum_root_height_m": 0.7227995243013764,
+          "wrist_speed_rms_rad_s": 0.31312995787162656,
+          "wrist_action_rate_rms": 4.073488555469292,
+          "max_raw_action": 3.101677179336548,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5554711249161766,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00021832510502717284,
+            "root_xy_drift_m": 0.04285976314181115,
+            "maximum_palm_error_m": 0.06767388379126692,
+            "mean_final_tilt_rad": 0.06306278042546075
+          },
+          "maximum_tilt_rad": 0.14881411933384614,
+          "minimum_root_height_m": 0.729503333522977,
+          "wrist_speed_rms_rad_s": 0.5592954814825767,
+          "wrist_action_rate_rms": 13.936480329541817,
+          "max_raw_action": 3.191464900970459,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5555860802516679,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00023767318494627432,
+            "root_xy_drift_m": 0.024110802988904455,
+            "maximum_palm_error_m": 0.04123900408416342,
+            "mean_final_tilt_rad": 0.06308818849111109
+          },
+          "maximum_tilt_rad": 0.15280853722381346,
+          "minimum_root_height_m": 0.7274817313403589,
+          "wrist_speed_rms_rad_s": 0.54798746460923,
+          "wrist_action_rate_rms": 13.30334664055309,
+          "max_raw_action": 3.119969129562378,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5519475857515408,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 3.369094839145159e-05,
+            "root_xy_drift_m": 0.030347211060214374,
+            "maximum_palm_error_m": 0.04442785553905902,
+            "mean_final_tilt_rad": 0.061472039768345296
+          },
+          "maximum_tilt_rad": 0.17069978683394435,
+          "minimum_root_height_m": 0.7298751411723129,
+          "wrist_speed_rms_rad_s": 0.5507821847305923,
+          "wrist_action_rate_rms": 13.699329433162719,
+          "max_raw_action": 3.3769006729125977,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5584562293150889,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 9.773423899239742e-05,
+            "root_xy_drift_m": 0.0032905088558658566,
+            "maximum_palm_error_m": 0.0051143853988467654,
+            "mean_final_tilt_rad": 0.057047442521537886
+          },
+          "maximum_tilt_rad": 0.09185776949383102,
+          "minimum_root_height_m": 0.7756503895551189,
+          "wrist_speed_rms_rad_s": 0.17045433684146916,
+          "wrist_action_rate_rms": 3.8729847876581025,
+          "max_raw_action": 3.101677179336548,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5600561453507713,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00021447782616224043,
+            "root_xy_drift_m": 0.029466011204542418,
+            "maximum_palm_error_m": 0.030369710583953807,
+            "mean_final_tilt_rad": 0.0633719115280481
+          },
+          "maximum_tilt_rad": 0.0951820541380116,
+          "minimum_root_height_m": 0.7721633302875697,
+          "wrist_speed_rms_rad_s": 0.5410237403202487,
+          "wrist_action_rate_rms": 14.122773533626056,
+          "max_raw_action": 3.191464900970459,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5581805783724335,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00021891177052058008,
+            "root_xy_drift_m": 0.027248833873889374,
+            "maximum_palm_error_m": 0.03260035215427293,
+            "mean_final_tilt_rad": 0.06296799729352996
+          },
+          "maximum_tilt_rad": 0.09055087424524715,
+          "minimum_root_height_m": 0.775872233699374,
+          "wrist_speed_rms_rad_s": 0.5220733891494526,
+          "wrist_action_rate_rms": 13.758124917148596,
+          "max_raw_action": 3.0051193237304688,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5591609770756283,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 4.753323042572255e-05,
+            "root_xy_drift_m": 0.032477835366048605,
+            "maximum_palm_error_m": 0.039204362942250104,
+            "mean_final_tilt_rad": 0.061457262218507114
+          },
+          "maximum_tilt_rad": 0.09974969204372612,
+          "minimum_root_height_m": 0.7733609130735158,
+          "wrist_speed_rms_rad_s": 0.5203313869367002,
+          "wrist_action_rate_rms": 13.823416759932499,
+          "max_raw_action": 3.2000646591186523,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5477814540016256,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00011945208588370892,
+            "root_xy_drift_m": 0.0007415142212246244,
+            "maximum_palm_error_m": 0.005893408962617327,
+            "mean_final_tilt_rad": 0.05695058671231918
+          },
+          "maximum_tilt_rad": 0.09352974172237095,
+          "minimum_root_height_m": 0.7810405109543598,
+          "wrist_speed_rms_rad_s": 0.10213144950274444,
+          "wrist_action_rate_rms": 3.82430977910159,
+          "max_raw_action": 3.101677179336548,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.575746279537301,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0001935421441826568,
+            "root_xy_drift_m": 0.01819304518162202,
+            "maximum_palm_error_m": 0.03796212840133234,
+            "mean_final_tilt_rad": 0.06327725473607981
+          },
+          "maximum_tilt_rad": 0.10376404702753197,
+          "minimum_root_height_m": 0.7527254462142324,
+          "wrist_speed_rms_rad_s": 0.5217424763230909,
+          "wrist_action_rate_rms": 14.15739659934172,
+          "max_raw_action": 3.938007116317749,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5915677420062969,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00022559173799074905,
+            "root_xy_drift_m": 0.03580008622969195,
+            "maximum_palm_error_m": 0.044774658600935845,
+            "mean_final_tilt_rad": 0.06288506197646301
+          },
+          "maximum_tilt_rad": 0.19272304568969995,
+          "minimum_root_height_m": 0.7239534807176661,
+          "wrist_speed_rms_rad_s": 0.49701613521156013,
+          "wrist_action_rate_rms": 13.459658190056802,
+          "max_raw_action": 3.3030378818511963,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5856345790377975,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 2.8806971440809015e-05,
+            "root_xy_drift_m": 0.020167031393459347,
+            "maximum_palm_error_m": 0.03187633285659474,
+            "mean_final_tilt_rad": 0.06188638956459272
+          },
+          "maximum_tilt_rad": 0.10437140652274307,
+          "minimum_root_height_m": 0.7407022298753637,
+          "wrist_speed_rms_rad_s": 0.5178154447643915,
+          "wrist_action_rate_rms": 13.972345037373655,
+          "max_raw_action": 3.5256943702697754,
+          "passed": true
+        }
+      ],
+      "stress": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 20,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0001903797850117961,
+            "root_xy_drift_m": 0.020352236868829077,
+            "maximum_palm_error_m": 0.025753231895677027,
+            "mean_final_tilt_rad": 0.06317888082437943
+          },
+          "maximum_tilt_rad": 0.08656977117414312,
+          "minimum_root_height_m": 0.7821096999802769,
+          "wrist_speed_rms_rad_s": 0.5203230932703542,
+          "wrist_action_rate_rms": 14.120057160354259,
+          "max_raw_action": 3.191464900970459
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 40,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00019658934718491672,
+            "root_xy_drift_m": 0.02939036689473879,
+            "maximum_palm_error_m": 0.042431638034097545,
+            "mean_final_tilt_rad": 0.06326140012373133
+          },
+          "maximum_tilt_rad": 0.09823159616856415,
+          "minimum_root_height_m": 0.7814998065013626,
+          "wrist_speed_rms_rad_s": 0.5524714975509559,
+          "wrist_action_rate_rms": 14.877733490825063,
+          "max_raw_action": 3.4714951515197754
+        }
+      ],
+      "parity": [
+        {
+          "contacts": {
+            "profile": "training",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.0,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00018602610557028054,
+            "root_xy_drift_m": 0.025518573886300414,
+            "maximum_palm_error_m": 0.029811153441664833,
+            "mean_final_tilt_rad": 0.06316398932168672
+          },
+          "maximum_tilt_rad": 0.08480558360455512,
+          "minimum_root_height_m": 0.7837830582925626,
+          "wrist_speed_rms_rad_s": 0.5039098151355177,
+          "wrist_action_rate_rms": 14.049614155276181,
+          "max_raw_action": 3.191464900970459
+        }
+      ],
+      "basic_passes": 16,
+      "noisy_standing_wrist_rms": 0.49662883239018213,
+      "noisy_standing_action_rate_rms": 13.844843179375017
+    },
+    {
+      "iteration": 19000,
+      "onnx_sha256": "7f3df0c70c24203b2e83e4fd6d19f71f880249c1c25799ec268a319e9e2533cb",
+      "basic": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0002398506006553447,
+            "root_xy_drift_m": 0.00956338821865771,
+            "maximum_palm_error_m": 0.020586538880384336,
+            "mean_final_tilt_rad": 0.055604544682132995
+          },
+          "maximum_tilt_rad": 0.0902639455065873,
+          "minimum_root_height_m": 0.7842094230579224,
+          "wrist_speed_rms_rad_s": 0.09921807052378537,
+          "wrist_action_rate_rms": 3.836050262826346,
+          "max_raw_action": 3.0671443939208984,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 5.51236275703193e-06,
+            "root_xy_drift_m": 0.025836740150021967,
+            "maximum_palm_error_m": 0.02801583651471581,
+            "mean_final_tilt_rad": 0.05617251857731609
+          },
+          "maximum_tilt_rad": 0.08902196817997628,
+          "minimum_root_height_m": 0.7839454222010949,
+          "wrist_speed_rms_rad_s": 0.4817312276007611,
+          "wrist_action_rate_rms": 13.172178208762997,
+          "max_raw_action": 3.2430648803710938,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00034821799714013224,
+            "root_xy_drift_m": 0.007434843628072207,
+            "maximum_palm_error_m": 0.012981520342483021,
+            "mean_final_tilt_rad": 0.05887226972180856
+          },
+          "maximum_tilt_rad": 0.0946026403899747,
+          "minimum_root_height_m": 0.7841885503284263,
+          "wrist_speed_rms_rad_s": 0.4620934024413466,
+          "wrist_action_rate_rms": 12.511500990455119,
+          "max_raw_action": 2.7117819786071777,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 4.188405408445117e-05,
+            "root_xy_drift_m": 0.025426289701359787,
+            "maximum_palm_error_m": 0.03390683604136838,
+            "mean_final_tilt_rad": 0.05601459828943318
+          },
+          "maximum_tilt_rad": 0.08738464343122203,
+          "minimum_root_height_m": 0.7845380081352611,
+          "wrist_speed_rms_rad_s": 0.4713881222868298,
+          "wrist_action_rate_rms": 12.748898651707602,
+          "max_raw_action": 2.7085957527160645,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5489017417615784,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0003258289069790754,
+            "root_xy_drift_m": 0.020987160732661856,
+            "maximum_palm_error_m": 0.051048686158743195,
+            "mean_final_tilt_rad": 0.05007375405040492
+          },
+          "maximum_tilt_rad": 0.20486373289181772,
+          "minimum_root_height_m": 0.7348143891309208,
+          "wrist_speed_rms_rad_s": 0.2908995135640538,
+          "wrist_action_rate_rms": 6.124625345182465,
+          "max_raw_action": 3.1714508533477783,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5457836270749146,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 1.5456096794208563e-05,
+            "root_xy_drift_m": 0.030113515571411703,
+            "maximum_palm_error_m": 0.038246915889716945,
+            "mean_final_tilt_rad": 0.05352967706940491
+          },
+          "maximum_tilt_rad": 0.22351293646240045,
+          "minimum_root_height_m": 0.7288925015893053,
+          "wrist_speed_rms_rad_s": 0.5224153505153541,
+          "wrist_action_rate_rms": 13.453020076888711,
+          "max_raw_action": 3.2430648803710938,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5442040799923422,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00031184244887905166,
+            "root_xy_drift_m": 0.01037900611116336,
+            "maximum_palm_error_m": 0.013594786653071643,
+            "mean_final_tilt_rad": 0.056171954253227976
+          },
+          "maximum_tilt_rad": 0.16959611701486307,
+          "minimum_root_height_m": 0.7452689248457445,
+          "wrist_speed_rms_rad_s": 0.4944234491030215,
+          "wrist_action_rate_rms": 12.581803674769132,
+          "max_raw_action": 3.208725929260254,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5496933113252598,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 6.679984796809091e-05,
+            "root_xy_drift_m": 0.017962809276814606,
+            "maximum_palm_error_m": 0.025698366980760758,
+            "mean_final_tilt_rad": 0.05394925310754248
+          },
+          "maximum_tilt_rad": 0.16212642279162912,
+          "minimum_root_height_m": 0.7429562503634214,
+          "wrist_speed_rms_rad_s": 0.5054565245759198,
+          "wrist_action_rate_rms": 12.392215204943234,
+          "max_raw_action": 2.7085957527160645,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5606608467232558,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00024142423626016818,
+            "root_xy_drift_m": 0.014967220883255706,
+            "maximum_palm_error_m": 0.02661100483009039,
+            "mean_final_tilt_rad": 0.054623857553705066
+          },
+          "maximum_tilt_rad": 0.09733781682799125,
+          "minimum_root_height_m": 0.7718036037588224,
+          "wrist_speed_rms_rad_s": 0.18500487085782902,
+          "wrist_action_rate_rms": 3.8979872769659445,
+          "max_raw_action": 3.0671443939208984,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5613389099034733,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 2.2359174546959792e-05,
+            "root_xy_drift_m": 0.03475561470598334,
+            "maximum_palm_error_m": 0.03944251005832998,
+            "mean_final_tilt_rad": 0.056517886647087415
+          },
+          "maximum_tilt_rad": 0.10521415876762728,
+          "minimum_root_height_m": 0.7657847542405521,
+          "wrist_speed_rms_rad_s": 0.5137142181078808,
+          "wrist_action_rate_rms": 13.117542033761847,
+          "max_raw_action": 3.2430648803710938,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5612031363003455,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00034388605263169225,
+            "root_xy_drift_m": 0.02031009697286949,
+            "maximum_palm_error_m": 0.027107054092773957,
+            "mean_final_tilt_rad": 0.05866042102347565
+          },
+          "maximum_tilt_rad": 0.10041276370110512,
+          "minimum_root_height_m": 0.7498773107315241,
+          "wrist_speed_rms_rad_s": 0.5141599289818259,
+          "wrist_action_rate_rms": 12.678535577970868,
+          "max_raw_action": 2.7117819786071777,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5613548425138674,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 7.814052366050817e-06,
+            "root_xy_drift_m": 0.02539864808356494,
+            "maximum_palm_error_m": 0.030646799749927324,
+            "mean_final_tilt_rad": 0.057070916584517004
+          },
+          "maximum_tilt_rad": 0.12348174433388531,
+          "minimum_root_height_m": 0.7686174939563987,
+          "wrist_speed_rms_rad_s": 0.49960377484564494,
+          "wrist_action_rate_rms": 12.962843427478786,
+          "max_raw_action": 2.8447213172912598,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5984999771808505,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0002175412838731905,
+            "root_xy_drift_m": 0.22686404691166792,
+            "maximum_palm_error_m": 0.23803801209970535,
+            "mean_final_tilt_rad": 0.05539345031282287
+          },
+          "maximum_tilt_rad": 0.4124814729636078,
+          "minimum_root_height_m": 0.6309745630541319,
+          "wrist_speed_rms_rad_s": 0.3633094225291281,
+          "wrist_action_rate_rms": 6.254940499574606,
+          "max_raw_action": 5.0017828941345215,
+          "passed": false
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.6071728550805584,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 2.4840168786344208e-05,
+            "root_xy_drift_m": 0.12540969544026642,
+            "maximum_palm_error_m": 0.14126036170687248,
+            "mean_final_tilt_rad": 0.0547626458180862
+          },
+          "maximum_tilt_rad": 0.41848458523191906,
+          "minimum_root_height_m": 0.6313927345796325,
+          "wrist_speed_rms_rad_s": 0.6076815414967909,
+          "wrist_action_rate_rms": 13.909837472446316,
+          "max_raw_action": 5.540741443634033,
+          "passed": false
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.6155384681323438,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00031749491019916753,
+            "root_xy_drift_m": 0.05007982049054278,
+            "maximum_palm_error_m": 0.051246266092965266,
+            "mean_final_tilt_rad": 0.056678691002591264
+          },
+          "maximum_tilt_rad": 0.3995760204696569,
+          "minimum_root_height_m": 0.6378752161754508,
+          "wrist_speed_rms_rad_s": 0.5274765031004452,
+          "wrist_action_rate_rms": 12.477233621639028,
+          "max_raw_action": 4.407123565673828,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.6068950575222747,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 9.930321589612934e-05,
+            "root_xy_drift_m": 0.12593093194743205,
+            "maximum_palm_error_m": 0.1474820040975322,
+            "mean_final_tilt_rad": 0.054241185918877964
+          },
+          "maximum_tilt_rad": 0.3934731731551992,
+          "minimum_root_height_m": 0.6338799055840465,
+          "wrist_speed_rms_rad_s": 0.5702837955121051,
+          "wrist_action_rate_rms": 12.750974297036295,
+          "max_raw_action": 5.102843761444092,
+          "passed": false
+        }
+      ],
+      "stress": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 20,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00010456643885503603,
+            "root_xy_drift_m": 0.02474074314990664,
+            "maximum_palm_error_m": 0.033297719715287624,
+            "mean_final_tilt_rad": 0.05752289798133863
+          },
+          "maximum_tilt_rad": 0.093551439051937,
+          "minimum_root_height_m": 0.7838754893384887,
+          "wrist_speed_rms_rad_s": 0.4214723306764163,
+          "wrist_action_rate_rms": 11.16653324139537,
+          "max_raw_action": 3.2430648803710938
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 40,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 8.935124468978373e-06,
+            "root_xy_drift_m": 0.015646918749665156,
+            "maximum_palm_error_m": 0.020484380937307103,
+            "mean_final_tilt_rad": 0.0597867933984342
+          },
+          "maximum_tilt_rad": 0.09411153398872264,
+          "minimum_root_height_m": 0.7826302541446594,
+          "wrist_speed_rms_rad_s": 0.4150837004555024,
+          "wrist_action_rate_rms": 11.357821208988836,
+          "max_raw_action": 3.2430648803710938
+        }
+      ],
+      "parity": [
+        {
+          "contacts": {
+            "profile": "training",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.0,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 5.51236275703193e-06,
+            "root_xy_drift_m": 0.025836740150021967,
+            "maximum_palm_error_m": 0.02801583651471581,
+            "mean_final_tilt_rad": 0.05617251857731609
+          },
+          "maximum_tilt_rad": 0.08902196817997628,
+          "minimum_root_height_m": 0.7839454222010949,
+          "wrist_speed_rms_rad_s": 0.4817312276007611,
+          "wrist_action_rate_rms": 13.172178208762997,
+          "max_raw_action": 3.2430648803710938
+        }
+      ],
+      "basic_passes": 13,
+      "noisy_standing_wrist_rms": 0.47173758410964584,
+      "noisy_standing_action_rate_rms": 12.810859283641905
+    },
+    {
+      "iteration": 19500,
+      "onnx_sha256": "6933ec18f0b25e28eba8929985fef8d6e81853180c3175a864347cef2be11b4b",
+      "basic": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 8.055977541721049e-07,
+            "root_xy_drift_m": 0.012411401950761276,
+            "maximum_palm_error_m": 0.02259831160846561,
+            "mean_final_tilt_rad": 0.046377900918923444
+          },
+          "maximum_tilt_rad": 0.08291363581018128,
+          "minimum_root_height_m": 0.7841360190050837,
+          "wrist_speed_rms_rad_s": 0.10443793553617639,
+          "wrist_action_rate_rms": 3.89513797244994,
+          "max_raw_action": 3.030618906021118,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00048793364954113905,
+            "root_xy_drift_m": 0.02208919967894047,
+            "maximum_palm_error_m": 0.02008420510983766,
+            "mean_final_tilt_rad": 0.04497135050823603
+          },
+          "maximum_tilt_rad": 0.08307629131968389,
+          "minimum_root_height_m": 0.7835525778619767,
+          "wrist_speed_rms_rad_s": 0.5099170920004804,
+          "wrist_action_rate_rms": 12.947300034065707,
+          "max_raw_action": 3.147526264190674,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00038063221597661734,
+            "root_xy_drift_m": 0.016364291470650286,
+            "maximum_palm_error_m": 0.023905312567971352,
+            "mean_final_tilt_rad": 0.04384926363864536
+          },
+          "maximum_tilt_rad": 0.08389107558210543,
+          "minimum_root_height_m": 0.7830369305857963,
+          "wrist_speed_rms_rad_s": 0.524106487843651,
+          "wrist_action_rate_rms": 12.92997603700576,
+          "max_raw_action": 2.80686354637146,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0004662639367829513,
+            "root_xy_drift_m": 0.023607918462663077,
+            "maximum_palm_error_m": 0.027513805268740126,
+            "mean_final_tilt_rad": 0.04325128545739217
+          },
+          "maximum_tilt_rad": 0.08194916878848221,
+          "minimum_root_height_m": 0.7816593591056104,
+          "wrist_speed_rms_rad_s": 0.5143791931148316,
+          "wrist_action_rate_rms": 12.841325877631496,
+          "max_raw_action": 2.718667984008789,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5555230626830107,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00018925221740306863,
+            "root_xy_drift_m": 0.023114205313732705,
+            "maximum_palm_error_m": 0.03877803156034844,
+            "mean_final_tilt_rad": 0.03850775614940697
+          },
+          "maximum_tilt_rad": 0.11994506065734999,
+          "minimum_root_height_m": 0.7371631376536721,
+          "wrist_speed_rms_rad_s": 0.2552700990740271,
+          "wrist_action_rate_rms": 4.01300421929486,
+          "max_raw_action": 3.030618906021118,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5513887268319398,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0007549406192001173,
+            "root_xy_drift_m": 0.03914570688365559,
+            "maximum_palm_error_m": 0.04975668651609921,
+            "mean_final_tilt_rad": 0.04228319904598683
+          },
+          "maximum_tilt_rad": 0.11095111673917164,
+          "minimum_root_height_m": 0.7397360080886234,
+          "wrist_speed_rms_rad_s": 0.5500689394910465,
+          "wrist_action_rate_rms": 12.697653642397942,
+          "max_raw_action": 3.147526264190674,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5521128959295873,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00046955996694508784,
+            "root_xy_drift_m": 0.02555261438041261,
+            "maximum_palm_error_m": 0.03172041374400229,
+            "mean_final_tilt_rad": 0.04287928459950339
+          },
+          "maximum_tilt_rad": 0.08389107558210543,
+          "minimum_root_height_m": 0.7499394209264426,
+          "wrist_speed_rms_rad_s": 0.5498843797176718,
+          "wrist_action_rate_rms": 12.802991850271795,
+          "max_raw_action": 2.80686354637146,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.550020391039078,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.000700432886140745,
+            "root_xy_drift_m": 0.023932661978424915,
+            "maximum_palm_error_m": 0.03322909038731306,
+            "mean_final_tilt_rad": 0.041695132606990495
+          },
+          "maximum_tilt_rad": 0.14379514416236538,
+          "minimum_root_height_m": 0.7344602715038183,
+          "wrist_speed_rms_rad_s": 0.5448483621640128,
+          "wrist_action_rate_rms": 12.621353389420936,
+          "max_raw_action": 2.718667984008789,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5596865963428653,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 2.0019068302956633e-05,
+            "root_xy_drift_m": 0.012980674284264707,
+            "maximum_palm_error_m": 0.021259586264824992,
+            "mean_final_tilt_rad": 0.046136975460432564
+          },
+          "maximum_tilt_rad": 0.08291363581018128,
+          "minimum_root_height_m": 0.7717405017350698,
+          "wrist_speed_rms_rad_s": 0.250525009175704,
+          "wrist_action_rate_rms": 4.026883930418965,
+          "max_raw_action": 3.030618906021118,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.560913198039624,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0005304130578259736,
+            "root_xy_drift_m": 0.028051233341479572,
+            "maximum_palm_error_m": 0.03211275763316449,
+            "mean_final_tilt_rad": 0.04426345833312518
+          },
+          "maximum_tilt_rad": 0.08307629131968389,
+          "minimum_root_height_m": 0.7664116310426528,
+          "wrist_speed_rms_rad_s": 0.5855661093254907,
+          "wrist_action_rate_rms": 13.480903327525589,
+          "max_raw_action": 3.147526264190674,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5608088720641267,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0004241731481344768,
+            "root_xy_drift_m": 0.02704651205526513,
+            "maximum_palm_error_m": 0.03922919833266145,
+            "mean_final_tilt_rad": 0.04372703268378845
+          },
+          "maximum_tilt_rad": 0.08620008882713215,
+          "minimum_root_height_m": 0.7610233500148289,
+          "wrist_speed_rms_rad_s": 0.6042428723966461,
+          "wrist_action_rate_rms": 13.574707934751206,
+          "max_raw_action": 2.80686354637146,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5602550671838885,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0005662021371798387,
+            "root_xy_drift_m": 0.027437378948392592,
+            "maximum_palm_error_m": 0.0332403715714157,
+            "mean_final_tilt_rad": 0.042326856837130694
+          },
+          "maximum_tilt_rad": 0.08194916878848221,
+          "minimum_root_height_m": 0.7684522102759339,
+          "wrist_speed_rms_rad_s": 0.5812457088150964,
+          "wrist_action_rate_rms": 13.461400302418363,
+          "max_raw_action": 2.718667984008789,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5909780205972506,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0006243441681298423,
+            "root_xy_drift_m": 0.04160223141643846,
+            "maximum_palm_error_m": 0.07684701266435842,
+            "mean_final_tilt_rad": 0.031731831878410305
+          },
+          "maximum_tilt_rad": 0.30825008772096446,
+          "minimum_root_height_m": 0.6937090128190236,
+          "wrist_speed_rms_rad_s": 0.20684777571732219,
+          "wrist_action_rate_rms": 4.098029391255302,
+          "max_raw_action": 3.109412431716919,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5930823625091017,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0006451820057302715,
+            "root_xy_drift_m": 0.055389080916997534,
+            "maximum_palm_error_m": 0.07749806282982546,
+            "mean_final_tilt_rad": 0.043096608691875975
+          },
+          "maximum_tilt_rad": 0.32099668350987676,
+          "minimum_root_height_m": 0.6875240765059933,
+          "wrist_speed_rms_rad_s": 0.5260019416538828,
+          "wrist_action_rate_rms": 12.743418732376421,
+          "max_raw_action": 3.8159804344177246,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.6107234568001814,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0004798138112968031,
+            "root_xy_drift_m": 0.05383182127367851,
+            "maximum_palm_error_m": 0.05812595832731711,
+            "mean_final_tilt_rad": 0.04239051154476682
+          },
+          "maximum_tilt_rad": 0.31340992062529727,
+          "minimum_root_height_m": 0.6891883500884916,
+          "wrist_speed_rms_rad_s": 0.5411487796849881,
+          "wrist_action_rate_rms": 12.626512949625564,
+          "max_raw_action": 3.52913236618042,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.6046660882405939,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0007128891948522398,
+            "root_xy_drift_m": 0.030090056976480088,
+            "maximum_palm_error_m": 0.0337898989434212,
+            "mean_final_tilt_rad": 0.04170179073216514
+          },
+          "maximum_tilt_rad": 0.30160145911257796,
+          "minimum_root_height_m": 0.6929457999257356,
+          "wrist_speed_rms_rad_s": 0.5156915700001823,
+          "wrist_action_rate_rms": 12.309832250242545,
+          "max_raw_action": 3.079972505569458,
+          "passed": true
+        }
+      ],
+      "stress": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 20,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0005032047632355097,
+            "root_xy_drift_m": 0.030528985815923327,
+            "maximum_palm_error_m": 0.030770189027722494,
+            "mean_final_tilt_rad": 0.04487760947779991
+          },
+          "maximum_tilt_rad": 0.0848275892082136,
+          "minimum_root_height_m": 0.7831944321633515,
+          "wrist_speed_rms_rad_s": 0.40648902232403605,
+          "wrist_action_rate_rms": 10.4768086517594,
+          "max_raw_action": 3.147526264190674
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 40,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0003549929939027363,
+            "root_xy_drift_m": 0.0210429611176683,
+            "maximum_palm_error_m": 0.0192826960387187,
+            "mean_final_tilt_rad": 0.048588942385397536
+          },
+          "maximum_tilt_rad": 0.0848275892082136,
+          "minimum_root_height_m": 0.7830596791800392,
+          "wrist_speed_rms_rad_s": 0.41355193642311516,
+          "wrist_action_rate_rms": 10.721626805966991,
+          "max_raw_action": 3.147526264190674
+        }
+      ],
+      "parity": [
+        {
+          "contacts": {
+            "profile": "training",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.0,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00048793364954113905,
+            "root_xy_drift_m": 0.02208919967894047,
+            "maximum_palm_error_m": 0.02008420510983766,
+            "mean_final_tilt_rad": 0.04497135050823603
+          },
+          "maximum_tilt_rad": 0.08307629131968389,
+          "minimum_root_height_m": 0.7835525778619767,
+          "wrist_speed_rms_rad_s": 0.5099170920004804,
+          "wrist_action_rate_rms": 12.947300034065707,
+          "max_raw_action": 3.147526264190674
+        }
+      ],
+      "basic_passes": 16,
+      "noisy_standing_wrist_rms": 0.5161342576529876,
+      "noisy_standing_action_rate_rms": 12.906200649567653
+    },
+    {
+      "iteration": 19999,
+      "onnx_sha256": "3002572e04d96564ab87d7076b55be979ab18789fefddb6009592df017e77765",
+      "basic": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00018956005440340373,
+            "root_xy_drift_m": 0.00338884470528732,
+            "maximum_palm_error_m": 0.005611835923726585,
+            "mean_final_tilt_rad": 0.03978170694268387
+          },
+          "maximum_tilt_rad": 0.07423527769705031,
+          "minimum_root_height_m": 0.7841860288152326,
+          "wrist_speed_rms_rad_s": 0.07720494706379122,
+          "wrist_action_rate_rms": 3.31773009753224,
+          "max_raw_action": 2.39176344871521,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00047578472376019754,
+            "root_xy_drift_m": 0.008134000850761037,
+            "maximum_palm_error_m": 0.019720877455428602,
+            "mean_final_tilt_rad": 0.04089250787569394
+          },
+          "maximum_tilt_rad": 0.07340533839637056,
+          "minimum_root_height_m": 0.7835183821579461,
+          "wrist_speed_rms_rad_s": 0.4834443545961516,
+          "wrist_action_rate_rms": 14.157142615858902,
+          "max_raw_action": 2.508974552154541,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00039922999483477106,
+            "root_xy_drift_m": 0.0077621917470802465,
+            "maximum_palm_error_m": 0.019807754343871893,
+            "mean_final_tilt_rad": 0.0438885761738392
+          },
+          "maximum_tilt_rad": 0.07734006674702383,
+          "minimum_root_height_m": 0.7838568091442093,
+          "wrist_speed_rms_rad_s": 0.44456822140692837,
+          "wrist_action_rate_rms": 12.550386701810222,
+          "max_raw_action": 2.4549560546875,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00017811816842006056,
+            "root_xy_drift_m": 0.007304107015665675,
+            "maximum_palm_error_m": 0.01970733550839711,
+            "mean_final_tilt_rad": 0.0395456488257939
+          },
+          "maximum_tilt_rad": 0.07332401787588694,
+          "minimum_root_height_m": 0.7844357079872902,
+          "wrist_speed_rms_rad_s": 0.45872049783234425,
+          "wrist_action_rate_rms": 13.388832433277358,
+          "max_raw_action": 2.5757968425750732,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5586568450287719,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0003175758685347585,
+            "root_xy_drift_m": 0.010586437740040528,
+            "maximum_palm_error_m": 0.015480004824959787,
+            "mean_final_tilt_rad": 0.03656354613816288
+          },
+          "maximum_tilt_rad": 0.11583551488719207,
+          "minimum_root_height_m": 0.7299110728728513,
+          "wrist_speed_rms_rad_s": 0.3165643754875125,
+          "wrist_action_rate_rms": 3.506376358259817,
+          "max_raw_action": 2.39176344871521,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5569375846907155,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0004445655969703699,
+            "root_xy_drift_m": 0.01933066117671335,
+            "maximum_palm_error_m": 0.0216245629482222,
+            "mean_final_tilt_rad": 0.04132297931033333
+          },
+          "maximum_tilt_rad": 0.13688330204014532,
+          "minimum_root_height_m": 0.721069487090221,
+          "wrist_speed_rms_rad_s": 0.5798723155883935,
+          "wrist_action_rate_rms": 14.071235012935954,
+          "max_raw_action": 2.526426076889038,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5554653736737339,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0003892061360361021,
+            "root_xy_drift_m": 0.011761565239897673,
+            "maximum_palm_error_m": 0.019120352246936975,
+            "mean_final_tilt_rad": 0.04374572203867514
+          },
+          "maximum_tilt_rad": 0.08044881451855176,
+          "minimum_root_height_m": 0.7424412567289409,
+          "wrist_speed_rms_rad_s": 0.5227906858317464,
+          "wrist_action_rate_rms": 12.824861312487577,
+          "max_raw_action": 2.4549560546875,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "left_pull",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5559620698671244,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0001473615498028824,
+            "root_xy_drift_m": 0.013968619496602297,
+            "maximum_palm_error_m": 0.017207562229177603,
+            "mean_final_tilt_rad": 0.03985057993916773
+          },
+          "maximum_tilt_rad": 0.11741961127279406,
+          "minimum_root_height_m": 0.7285531894144139,
+          "wrist_speed_rms_rad_s": 0.5428291600786236,
+          "wrist_action_rate_rms": 13.391177125860217,
+          "max_raw_action": 2.5484700202941895,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5596704738934094,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00022429021382019965,
+            "root_xy_drift_m": 0.004648910706083331,
+            "maximum_palm_error_m": 0.004144595143209926,
+            "mean_final_tilt_rad": 0.03965651718539749
+          },
+          "maximum_tilt_rad": 0.07423527769705031,
+          "minimum_root_height_m": 0.7805474151277416,
+          "wrist_speed_rms_rad_s": 0.18242469333747596,
+          "wrist_action_rate_rms": 3.3898652750058367,
+          "max_raw_action": 2.39176344871521,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5601662891831776,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0005245903087984782,
+            "root_xy_drift_m": 0.004318047958610999,
+            "maximum_palm_error_m": 0.022116038861051464,
+            "mean_final_tilt_rad": 0.04090645467512779
+          },
+          "maximum_tilt_rad": 0.07340533839637056,
+          "minimum_root_height_m": 0.7776104059009495,
+          "wrist_speed_rms_rad_s": 0.5422650491178831,
+          "wrist_action_rate_rms": 14.783638140781644,
+          "max_raw_action": 2.5297772884368896,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5590568954945541,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0004168792768559637,
+            "root_xy_drift_m": 0.007015429733295503,
+            "maximum_palm_error_m": 0.0242399035935812,
+            "mean_final_tilt_rad": 0.043470930401156696
+          },
+          "maximum_tilt_rad": 0.07734006674702383,
+          "minimum_root_height_m": 0.7777641788872036,
+          "wrist_speed_rms_rad_s": 0.5078711151992147,
+          "wrist_action_rate_rms": 13.230688609000815,
+          "max_raw_action": 2.479283094406128,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "right_pull",
+          "load_forces_world_N": {
+            "right_palm": [
+              0.0,
+              -20.0,
+              0.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 20.0,
+          "peak_lever_arm_torque_Nm": 0.5597021843008803,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00019412927650364065,
+            "root_xy_drift_m": 0.00549092355928855,
+            "maximum_palm_error_m": 0.02687776915126926,
+            "mean_final_tilt_rad": 0.03930864854955946
+          },
+          "maximum_tilt_rad": 0.07332401787588694,
+          "minimum_root_height_m": 0.7790094731390357,
+          "wrist_speed_rms_rad_s": 0.5114518559307173,
+          "wrist_action_rate_rms": 13.956728960728828,
+          "max_raw_action": 2.5799646377563477,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": false,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.609045885136326,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0003656961891986832,
+            "root_xy_drift_m": 0.018451770338472034,
+            "maximum_palm_error_m": 0.026877432454155154,
+            "mean_final_tilt_rad": 0.03707085181021786
+          },
+          "maximum_tilt_rad": 0.23789253273370448,
+          "minimum_root_height_m": 0.7116910529487258,
+          "wrist_speed_rms_rad_s": 0.24279618215015944,
+          "wrist_action_rate_rms": 6.643401933380841,
+          "max_raw_action": 2.7952373027801514,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.6157342719874183,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0005121140004370472,
+            "root_xy_drift_m": 0.031911508610917884,
+            "maximum_palm_error_m": 0.03441697694057765,
+            "mean_final_tilt_rad": 0.04039704586643844
+          },
+          "maximum_tilt_rad": 0.2485586512425745,
+          "minimum_root_height_m": 0.7114076746233633,
+          "wrist_speed_rms_rad_s": 0.5365117483143247,
+          "wrist_action_rate_rms": 14.477374700605017,
+          "max_raw_action": 3.5400617122650146,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 43,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.6179250665931435,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0004242957241261669,
+            "root_xy_drift_m": 0.005861175362858657,
+            "maximum_palm_error_m": 0.015071334003783717,
+            "mean_final_tilt_rad": 0.04321357391460861
+          },
+          "maximum_tilt_rad": 0.2115917519442028,
+          "minimum_root_height_m": 0.71903770344138,
+          "wrist_speed_rms_rad_s": 0.48704135378346125,
+          "wrist_action_rate_rms": 13.173209352269904,
+          "max_raw_action": 3.57174015045166,
+          "passed": true
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 44,
+          "seconds": 29.999999999998316,
+          "load": "downward",
+          "load_forces_world_N": {
+            "left_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ],
+            "right_palm": [
+              0.0,
+              0.0,
+              -30.0
+            ]
+          },
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 30.0,
+          "peak_lever_arm_torque_Nm": 0.5990210163747839,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.0001975925268467016,
+            "root_xy_drift_m": 0.01886991136253498,
+            "maximum_palm_error_m": 0.022989663556574412,
+            "mean_final_tilt_rad": 0.03932366548605916
+          },
+          "maximum_tilt_rad": 0.25336336862675163,
+          "minimum_root_height_m": 0.7046732887040156,
+          "wrist_speed_rms_rad_s": 0.5223824954251715,
+          "wrist_action_rate_rms": 14.012742923493454,
+          "max_raw_action": 3.629384756088257,
+          "passed": true
+        }
+      ],
+      "stress": [
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 20,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00035976893418887546,
+            "root_xy_drift_m": 0.009845205078781779,
+            "maximum_palm_error_m": 0.017030714861718328,
+            "mean_final_tilt_rad": 0.04149306316118769
+          },
+          "maximum_tilt_rad": 0.07340533839637056,
+          "minimum_root_height_m": 0.7842018509957619,
+          "wrist_speed_rms_rad_s": 0.4302631120584863,
+          "wrist_action_rate_rms": 11.248359050364789,
+          "max_raw_action": 2.625802755355835
+        },
+        {
+          "contacts": {
+            "profile": "frictional-body",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.5,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 40,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00041496561642329066,
+            "root_xy_drift_m": 0.014457188675904923,
+            "maximum_palm_error_m": 0.03619222337031417,
+            "mean_final_tilt_rad": 0.04409255775570006
+          },
+          "maximum_tilt_rad": 0.07340533839637056,
+          "minimum_root_height_m": 0.78385753293081,
+          "wrist_speed_rms_rad_s": 0.4538457550314415,
+          "wrist_action_rate_rms": 12.376009348652012,
+          "max_raw_action": 3.6219472885131836
+        }
+      ],
+      "parity": [
+        {
+          "contacts": {
+            "profile": "training",
+            "foot_sliding_friction": 0.6,
+            "body_sliding_friction": 0.0,
+            "hardware_calibrated": false
+          },
+          "mode": "implicit",
+          "sensor_noise": true,
+          "extra_sensor_delay_ms": 0,
+          "seed": 42,
+          "seconds": 29.999999999998316,
+          "load": "none",
+          "load_forces_world_N": {},
+          "load_window_s": [
+            5,
+            9
+          ],
+          "peak_per_hand_force_N": 0.0,
+          "peak_lever_arm_torque_Nm": 0.0,
+          "fallen": false,
+          "recovery": {
+            "root_height_error_m": 0.00047578472376019754,
+            "root_xy_drift_m": 0.008134000850761037,
+            "maximum_palm_error_m": 0.019720877455428602,
+            "mean_final_tilt_rad": 0.04089250787569394
+          },
+          "maximum_tilt_rad": 0.07340533839637056,
+          "minimum_root_height_m": 0.7835183821579461,
+          "wrist_speed_rms_rad_s": 0.4834443545961516,
+          "wrist_action_rate_rms": 14.157142615858902,
+          "max_raw_action": 2.508974552154541
+        }
+      ],
+      "basic_passes": 16,
+      "noisy_standing_wrist_rms": 0.4622443579451414,
+      "noisy_standing_action_rate_rms": 13.365453916982162
+    }
+  ],
+  "selected_iteration": null,
+  "hardware_validated": false,
+  "complete": true,
+  "installation_decision": "Not installed: no later checkpoint improved noisy-standing wrist RMS versus 15000 while passing all basic tests.",
+  "best_late_candidate_iteration": 19999,
+  "training_run_completed": true,
+  "wandb_url": "https://wandb.ai/mht3/g1_compliance/runs/0e0cx7an"
+}

@@ -1,0 +1,50 @@
+[
+  {
+    "mode": "implicit",
+    "sensor_noise": false,
+    "extra_sensor_delay_ms": 0,
+    "seed": 42,
+    "seconds": 30.0,
+    "minimum_root_height_m": 0.7850019349821329,
+    "wrist_speed_rms_rad_s": 0.15476393659051707,
+    "wrist_action_rate_rms": 4.717209506096425,
+    "max_raw_action": 2.647061824798584,
+    "iteration": 14000
+  },
+  {
+    "mode": "implicit",
+    "sensor_noise": true,
+    "extra_sensor_delay_ms": 0,
+    "seed": 42,
+    "seconds": 30.0,
+    "minimum_root_height_m": 0.7819884995254094,
+    "wrist_speed_rms_rad_s": 0.7735862310152626,
+    "wrist_action_rate_rms": 19.079580099384348,
+    "max_raw_action": 2.8876407146453857,
+    "iteration": 14000
+  },
+  {
+    "mode": "implicit",
+    "sensor_noise": true,
+    "extra_sensor_delay_ms": 20,
+    "seed": 42,
+    "seconds": 30.0,
+    "minimum_root_height_m": 0.783482577243855,
+    "wrist_speed_rms_rad_s": 0.6317876065679451,
+    "wrist_action_rate_rms": 15.544118645160758,
+    "max_raw_action": 2.7132444381713867,
+    "iteration": 14000
+  },
+  {
+    "mode": "implicit",
+    "sensor_noise": true,
+    "extra_sensor_delay_ms": 40,
+    "seed": 42,
+    "seconds": 30.0,
+    "minimum_root_height_m": 0.7823221131178059,
+    "wrist_speed_rms_rad_s": 0.634392757018414,
+    "wrist_action_rate_rms": 14.670160429524762,
+    "max_raw_action": 2.9651288986206055,
+    "iteration": 14000
+  }
+]

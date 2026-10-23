@@ -1,0 +1,11 @@
+{
+  "iteration": 24000,
+  "checkpoint_name": "model_24000.pt",
+  "checkpoint_sha256": "5f0c430b7337862b98901174954c8730403627b8d3714b083557feb9ec17a7b2",
+  "onnx_sha256": "273422a34cf77abe77ab8eac45ff307a158a18de422db41bdeaeaeedac2ecc1e",
+  "obs_normalization": false,
+  "parity_samples": 32,
+  "max_abs_action_error": 1.52587890625e-05,
+  "device": "cpu",
+  "behavior_validated": false
+}

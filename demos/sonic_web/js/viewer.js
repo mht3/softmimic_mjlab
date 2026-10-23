@@ -8,6 +8,7 @@
  *  4. render()     – Three.js render call.
  */
 
+import {applyPassiveActuation} from './actuation.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -420,6 +421,12 @@ export class MuJoCoViewer {
       bias: Float64Array.from(this.model.actuator_biasprm)};
     this.model.actuator_gainprm.set(enabled ? this._actuatorParameters.gain : new Float64Array(this._actuatorParameters.gain.length));
     this.model.actuator_biasprm.set(enabled ? this._actuatorParameters.bias : new Float64Array(this._actuatorParameters.bias.length));
+  }
+
+  setPassiveActuation(damping=3) {
+    this.setPolicyActuation(false);
+    // Prepared policy actuators are affine PD: no position drive, only -kd*dq.
+    applyPassiveActuation(this.model,this.data,damping);
   }
 
   stepPhysics(ctrl) {
