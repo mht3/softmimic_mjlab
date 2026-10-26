@@ -7,6 +7,9 @@ FSM:
     Mimic_Compliant_Stand:
       id: 5
       type: Mimic
+    Velocity:
+      id: 3
+      type: RLBase
   Passive:
     transitions:
       FixStand: LT + up.on_pressed
@@ -74,6 +77,7 @@ FSM:
     transitions:
       Passive: LT + B.on_pressed
       Mimic_Compliant_Stand: RB + A.on_pressed
+      Velocity: RB + X.on_pressed
     kp:
     - 100.0
     - 100.0
@@ -180,3 +184,9 @@ FSM:
       Passive: LT + B.on_pressed
     reference_csv: config/policy/compliant_mimic/stand/params/reference.csv
     policy_watchdog_ms: 100
+  Velocity:
+    policy_dir: config/policy/velocity
+    limit_angle: 1.0  # radians (~57 deg); triggers Passive on fall
+    transitions:
+      Passive: LT + B.on_pressed
+      Mimic_Compliant_Stand: RB + A.on_pressed

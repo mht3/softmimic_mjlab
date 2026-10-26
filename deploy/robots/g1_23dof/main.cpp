@@ -64,7 +64,8 @@ int main(int argc, char** argv)
     fsm->start();
 
     std::cout << "Press [L2 + Up] to enter FixStand mode.\n";
-    std::cout << "Then [R1 + A] enters compliant standing; [L2 + B] returns to Passive.\n";
+    std::cout << "Then [R1 + A] enters compliant standing; [R1 + X] enters Velocity walking; [L2 + B] returns to Passive.\n";
+    std::cout << "Velocity -> Compliant_Stand via [R1 + A]; Compliant_Stand exits only to Passive via [L2 + B].\n";
 
 
     while (true)
