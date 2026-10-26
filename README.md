@@ -4,15 +4,7 @@ A reimplementation of SoftMimic in mjlab and a browser physics demo.
 
 ## Installation and environment
 
-Use the `unitree_rl_mjlab` conda environment with Python 3.11, following the original [installation guide](doc/setup_en.md). The repository pins mjlab 1.2.0 and MuJoCo 3.8.1. Skip environment creation if it already exists.
-
-```bash
-conda create -n unitree_rl_mjlab python=3.11
-```
-
-```bash
-conda activate unitree_rl_mjlab
-```
+Use the `unitree_rl_mjlab` conda environment with Python 3.11, following the original [installation guide](doc/setup_en.md). The repository pins mjlab 1.2.0 and MuJoCo 3.8.1.
 
 ```bash
 git clone https://github.com/mht3/softmimic_mjlab.git
@@ -23,6 +15,14 @@ cd softmimic_mjlab
 ```
 
 ```bash
+conda create -n unitree_rl_mjlab python=3.11
+```
+
+```bash
+conda activate unitree_rl_mjlab
+```
+
+```bash
 bash setup.sh
 ```
 
@@ -30,13 +30,9 @@ bash setup.sh
 python -m pip install onnx
 ```
 
-Run the commands below from the repository root. In each new terminal, activate the environment first:
+## Run the policy demo
 
-```bash
-conda activate unitree_rl_mjlab
-```
-
-## Run the included policy demo
+The following is an example of how we can deploy a trained policy in simulation. This uses a demo similar to NVIDIA's [GEAR SONIC](https://nvlabs.github.io/GEAR-SONIC/) work.
 
 ```bash
 python demos/sonic_web/serve.py --port 8088 \
@@ -45,13 +41,12 @@ python demos/sonic_web/serve.py --port 8088 \
   --policy deploy/robots/g1_23dof/config/policy/compliant_mimic/stand/exported/policy.onnx
 ```
 
-Open **[Compliant Humanoid](http://127.0.0.1:8088)** in a modern desktop browser. The launch command validates all three files and rebuilds viewer assets from the included ONNX, source meshes and standing CSV. Enable **Trained ONNX policy**, then press **Play**. **Reset** or **R** restores the pose and turns policy/physics ON, with playback paused until Play. Drag the robot to apply forces; reset or scrub the fixed reference below. The cyan ghost shows the nominal pose.
+Open **[Compliant Humanoid](http://127.0.0.1:8088)** in a browser. The launch command validates all three files and rebuilds viewer assets from the included ONNX, source meshes and standing CSV. Enable **Trained ONNX policy**, then press **Play**. **Reset** or **R** restores the pose and turns policy/physics ON, with playback paused until Play. Drag the robot to apply forces; reset or scrub the fixed reference below. The cyan ghost shows the nominal pose.
 
-The demo and default hardware configuration use the matched **checkpoint 34,000** from the fresh 50k training run. It passed **16/16** basic standing/recovery trials, **6/6** seeded dynamics trials, and both delay stress trials; noisy wrist RMS was **0.313 rad/s** ([comparison and test limits](doc/ROBUSTNESS_TESTING.md)). The run is ongoing; this is a selected intermediate checkpoint. Run `python deploy/check_bundle.py` to verify the included ONNX, YAML, CSV and portable controller config. Physical robot validation remains required.
 
 ![Compliant Humanoid physics player](doc/images/deployment_34000.png)
 
-## Create a reference → train → deploy
+## Create a reference -> train -> deploy
 
 The small `datasets/streamer/stand.csv` input and the matched deployment reference CSV are versioned. Generated IK CSV/NPZ pairs, prepared references, audits, staging/backup directories and legacy motion libraries are local and ignored. Recreate the supported dataset with step 2; its complete audit runs before installation. Generated viewer assets are also ignored and rebuilt by the quickstart above. The demo and deployment ONNX files and matching deployment configurations remain included.
 
