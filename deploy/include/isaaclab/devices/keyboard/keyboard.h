@@ -6,6 +6,9 @@
 #include <termios.h>
 #include <unistd.h>
 #include <thread>
+#include <atomic>
+#include <mutex>
+#include <iostream>
 
 
 /**
@@ -17,17 +20,18 @@ class Keyboard
 public:
   Keyboard()
   {
-    tcgetattr( fileno( stdin ), &_oldSettings );
+    if (!isatty(fileno(stdin)) || tcgetattr(fileno(stdin), &_oldSettings) != 0) return;
+    _has_terminal = true;
     _newSettings = _oldSettings;
-    _oldSettings.c_lflag |= ( ICANON |  ECHO);
     _newSettings.c_lflag &= (~ICANON & ~ECHO);
 
     _startKey();
 
     _thread_running  = true;
     _readThread = std::thread([this] {
-      while (_running) {
-        _read();
+      while (_thread_running) {
+        if (_running) _read();
+        else std::this_thread::sleep_for(std::chrono::milliseconds(10));
       }
     });
   }
@@ -35,11 +39,14 @@ public:
   ~Keyboard()
   {
     _thread_running = false;
+    _running = false;
+    if (_readThread.joinable()) _readThread.join();
     _pauseKey();
   }
 
   void update()
   {
+    std::lock_guard<std::mutex> lock(_key_mutex);
     if(_key != _last_key)
     {
       on_pressed = _key != "";
@@ -59,7 +66,7 @@ public:
    * 
    * @return std::string 
    */
-  std::string key() const { return _key; };
+  std::string key() const { std::lock_guard<std::mutex> lock(_key_mutex); return _key; };
 
   /**
    * @brief Get the String object from keyboard 
@@ -91,50 +98,37 @@ public:
   bool on_released = false;
 
   private:
-  bool _thread_running = false;
-  bool _running = false;
+  std::atomic<bool> _thread_running{false};
+  std::atomic<bool> _running{false};
+  bool _has_terminal = false;
+  mutable std::mutex _key_mutex;
   std::thread _readThread;
+
+  bool read_char(char &c)
+  {
+    fd_set ready; FD_ZERO(&ready); FD_SET(fileno(stdin), &ready);
+    timeval timeout{0, 80000};
+    return _thread_running && _running &&
+      select(fileno(stdin)+1, &ready, nullptr, nullptr, &timeout) > 0 &&
+      read(fileno(stdin), &c, 1) == 1;
+  }
 
   void _read()
   {
-    if(_running)
-    {
-      FD_ZERO(&_fd_set);
-      FD_SET( fileno(stdin), &_fd_set);
-
-      _tv.tv_sec = 0;
-      _tv.tv_usec = 80000;
-
-      if(select(fileno(stdin)+1, &_fd_set, NULL, NULL, &_tv))
-      {
-        // Read the key value into _c
-        int res = read( fileno(stdin), &_c, 1 );
-
-        // Parser the key value
-        if(_c != '\033') {
-          // This is a normal key
-          _key = _c;
-        }else{
-          // This is a special key
-          int m = read(fileno(stdin), &_c, 1);
-          if(_c == '[')
-          {
-            m = read(fileno(stdin), &_c, 1);
-            switch (_c)
-            {
-            case 'A': _key = "up";    break;
-            case 'B': _key = "down";  break;
-            case 'C': _key = "right"; break;
-            case 'D': _key = "left";  break;
-            default:  _key = "";      break;
-            }
-          }
+    char c; std::string value;
+    if (read_char(c)) {
+      if (c != '\033') value = c;
+      else if (read_char(c) && c == '[' && read_char(c)) {
+        switch (c) {
+          case 'A': value="up"; break;
+          case 'B': value="down"; break;
+          case 'C': value="right"; break;
+          case 'D': value="left"; break;
         }
-      }else{
-        _key = "";
       }
-      // std::cout << "key: "<< key() << std::endl;
     }
+    std::lock_guard<std::mutex> lock(_key_mutex);
+    _key = value;
   }
 
   /**
@@ -142,7 +136,7 @@ public:
    */
   void _pauseKey()
   {
-    tcsetattr( fileno( stdin ), TCSANOW, &_oldSettings );
+    if (_has_terminal) tcsetattr(fileno(stdin), TCSANOW, &_oldSettings);
     _running = false;
   }
 
@@ -151,14 +145,11 @@ public:
    */
   void _startKey()
   {
-    tcsetattr( fileno( stdin ), TCSANOW, &_newSettings );
+    if (_has_terminal) tcsetattr(fileno(stdin), TCSANOW, &_newSettings);
     _running = true;
   }
 
-  fd_set _fd_set;
-  char _c = '\0';
   std::string _key, _last_key;
   
-  termios _oldSettings, _newSettings;
-  timeval _tv;
+  termios _oldSettings{}, _newSettings{};
 };

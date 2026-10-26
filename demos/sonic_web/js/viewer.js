@@ -431,10 +431,10 @@ export class MuJoCoViewer {
 
   stepPhysics(ctrl) {
     if (!this._ready) return;
-    this._applyDragForce();
+    this._applyExternalForces();
     const { mujoco, model, data } = this;
     for (let j = 0; j < ctrl.length; j++) data.ctrl[j] = ctrl[j];
-    for (let s = 0; s < 4; s++) { this._applyDragForce(); mujoco.mj_step(model, data); }
+    for (let s = 0; s < 4; s++) { this._applyExternalForces(); mujoco.mj_step(model, data); }
     this._syncGeoms();
   }
 
@@ -444,7 +444,7 @@ export class MuJoCoViewer {
 
   stepPhysicsOnce(ctrl) {
     if (!this._ready) return;
-    this._applyDragForce();
+    this._applyExternalForces();
     const { mujoco, model, data } = this;
     for (let j = 0; j < ctrl.length; j++) data.ctrl[j] = ctrl[j];
     mujoco.mj_step(model, data);
@@ -592,6 +592,12 @@ export class MuJoCoViewer {
       xmat[o+3]*lx + xmat[o+4]*ly + xmat[o+5]*lz + data.xpos[id*3+1],
       xmat[o+6]*lx + xmat[o+7]*ly + xmat[o+8]*lz + data.xpos[id*3+2],
     );
+  }
+
+  _applyExternalForces() {
+    this.data.xfrc_applied.fill(0);
+    this._applyDragForce();
+    this.externalForceCallback?.();
   }
 
   _applyDragForce() {

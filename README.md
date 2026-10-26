@@ -47,9 +47,9 @@ python demos/sonic_web/serve.py --port 8088 \
 
 Open **[Compliant Humanoid](http://127.0.0.1:8088)** in a modern desktop browser. The launch command validates all three files and rebuilds viewer assets from the included ONNX, source meshes and standing CSV. Enable **Trained ONNX policy**, then press **Play**. **Reset** or **R** restores the pose and turns policy/physics ON, with playback paused until Play. Drag the robot to apply forces; reset or scrub the fixed reference below. The cyan ghost shows the nominal pose.
 
-The demo and default hardware configuration use the matched **Stable checkpoint 24,000**, including its ONNX, deployment YAML and standing CSV. It was selected from 28 checkpoints: 30/30 standing/recovery tests passed, with lower noisy wrist motion than 15k ([results](doc/WRIST_NOISE_REVIEW.md)). Run `python deploy/check_bundle.py` to verify the included files offline. The 25,000-iteration run is complete; its final checkpoint passed 26/30 recovery tests, so 24k remains selected. Simulation and interface checks do not establish hardware performance.
+The demo and default hardware configuration use the matched **checkpoint 34,000** from the fresh 50k training run. It passed **16/16** basic standing/recovery trials, **6/6** seeded dynamics trials, and both delay stress trials; noisy wrist RMS was **0.313 rad/s** ([comparison and test limits](doc/ROBUSTNESS_TESTING.md)). The run is ongoing; this is a selected intermediate checkpoint. Run `python deploy/check_bundle.py` to verify the included ONNX, YAML, CSV and portable controller config. Physical robot validation remains required.
 
-![Compliant Humanoid physics player](doc/images/deployment_24000.png)
+![Compliant Humanoid physics player](doc/images/deployment_34000.png)
 
 ## Create a reference → train → deploy
 
@@ -80,7 +80,7 @@ The small `datasets/streamer/stand.csv` input and the matched deployment referen
    ./deploy/robots/g1_23dof/build/g1_ctrl --network=YOUR_ROBOT_NETWORK_INTERFACE
    ```
 
-[Full reproducible workflow](WORKFLOW.md) · [Motion editor controls](demos/ardy_web/README.md) · [Policy player](demos/sonic_web/README.md)
+[Full reproducible workflow](WORKFLOW.md) · [Motion editor controls](demos/ardy_web/README.md) · [Policy player](demos/sonic_web/README.md) · [Noise and domain randomization tests](doc/ROBUSTNESS_TESTING.md)
 
 For a remote workstation, run this on your local machine:
 

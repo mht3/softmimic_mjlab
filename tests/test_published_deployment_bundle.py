@@ -9,7 +9,7 @@ BUNDLE = Path('deploy/robots/g1_23dof/config/policy/compliant_mimic/stand')
 
 
 def test_relocated_bundle_and_mismatch_rejection(tmp_path):
-    files = [Path('deploy/check_bundle.py'), Path('demos/sonic_web/reference.py'),
+    files = [Path('deploy/robots/g1_23dof/config/config.yaml'), Path('deploy/check_bundle.py'), Path('demos/sonic_web/reference.py'),
              Path('demos/ardy_web/robot_contract.json')]
     files += [BUNDLE / name for name in ['manifest.json','controller_config.yaml',
               'exported/policy.onnx','params/deploy.yaml','params/reference.csv']]
@@ -21,6 +21,18 @@ def test_relocated_bundle_and_mismatch_rejection(tmp_path):
     good = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True)
     assert good.returncode == 0, good.stderr
     assert 'PASS' in good.stdout
+    config = tmp_path/'deploy/robots/g1_23dof/config/config.yaml'
+    original = config.read_text()
+    config.write_text(original.replace('policy_watchdog_ms: 100', 'policy_watchdog_ms: 200'))
+    mismatch = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True)
+    assert mismatch.returncode != 0 and 'Default controller configuration differs' in mismatch.stderr
+    config.write_text(original)
+    controller = tmp_path/BUNDLE/'controller_config.yaml'
+    controller_original = controller.read_text()
+    controller.write_text(controller_original + '\n')
+    mismatch = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True)
+    assert mismatch.returncode != 0 and 'Mismatched bundle file: controller_config.yaml' in mismatch.stderr
+    controller.write_text(controller_original)
     with (tmp_path/BUNDLE/'params/reference.csv').open('a') as stream:
         stream.write('\n')
     bad = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True)

@@ -14,16 +14,17 @@ let frame;
 globalThis.requestAnimationFrame=callback=>{frame=callback;};
 let inferences=0,physicsSteps=0,passiveSteps=0;
 const modelURL=moduleURL(`export class MuJoCoViewer {
- constructor(){globalThis.testViewer=this;this.ready=true;this.renderer=false;this.data={qpos:new Float64Array(30),qvel:new Float64Array(29)};this.data.qpos[3]=1;}
+ constructor(){globalThis.testViewer=this;this.ready=true;this.renderer=false;this.data={qpos:new Float64Array(30),qvel:new Float64Array(29),time:0,site_xpos:new Float64Array([0,1,0,0,-1,0]),xipos:new Float64Array(9),xfrc_applied:new Float64Array(18)};this.data.qpos[3]=1;this.mujoco={mj_setConst(){}};this.model={site_bodyid:[1,2],actuator_gainprm:new Float64Array(230),actuator_biasprm:new Float64Array(230)};}
  initThree(){} async loadScene(){} initDragForce(){} clearDragForce(){} setGhost(){} render(){} finalizeStep(){}
- resetToDefault(){this.data.qpos.fill(0);this.data.qpos[3]=1;}
+ resetToDefault(){this.data.qpos.fill(0);this.data.qpos[3]=1;this.mujoco={mj_setConst(){}};this.model={site_bodyid:[1,2],actuator_gainprm:new Float64Array(230),actuator_biasprm:new Float64Array(230)};}
  setPolicyActuation(){this.passive=false;}setPassiveActuation(){this.passive=true;}
- stepPhysicsOnce(){globalThis.testPhysicsStep();this.data.qpos[3]=Math.SQRT1_2;this.data.qpos[4]=Math.SQRT1_2;}
+ stepPhysicsOnce(){this.data.xfrc_applied.fill(0);this.externalForceCallback?.();globalThis.testPhysicsStep();if(globalThis.testFall!==false){this.data.qpos[3]=Math.SQRT1_2;this.data.qpos[4]=Math.SQRT1_2;}this.data.time+=.005;}
  stepPhysics(){globalThis.testPassiveStep();if(!this.passive)throw Error('Fault lost damping');}
 }`);
 globalThis.testPhysicsStep=()=>physicsSteps++;
 globalThis.testPassiveStep=()=>passiveSteps++;
 globalThis.testInference=()=>{inferences++;return new Float32Array(23);};
+const randomizationURL=moduleURL(`export class DomainRandomizer {apply(){return {payload_kg:0,foot_friction:.6}}};export function objectNames(){return ['left_palm','right_palm']}`);
 const policyURL=moduleURL(`export class SoftMimicPolicy {
  async load(config){this.config=config;}reset(){}pushHistory(){}async infer(){return globalThis.testInference();}
  actionToTargets(action){return action;}
@@ -31,7 +32,7 @@ const policyURL=moduleURL(`export class SoftMimicPolicy {
 const referenceURL=moduleURL(`export function validateReference(){};export function referenceFrame(){return {pos:[0,0,.8],quat:[1,0,0,0],joints:Array(23).fill(0)}}`);
 globalThis.fetch=async url=>({ok:true,json:async()=>url.includes('contract')?{joint_names:[]}:url.includes('stand.json')?{frames:1501,fps:50,name:'Fixture'}:{fall_detection:{limit_angle:1.25,passive_damping:3},actuation:'implicit_pd',checkpoint_iteration:15000,stiffness_command:200,rotational_stiffness_command:1}});
 let source=fs.readFileSync(new URL('js/demo.js',base),'utf8');
-for(const [path,url] of Object.entries({'./viewer.js':modelURL,'./policy.js':policyURL,'./reference.js':referenceURL,'./sensors.js':new URL('js/sensors.js',base).href,'./fall_guard.js':new URL('js/fall_guard.js',base).href}))source=source.replace(`from '${path}'`,`from '${url}'`);
+for(const [path,url] of Object.entries({'./viewer.js':modelURL,'./randomization.js':randomizationURL,'./policy.js':policyURL,'./reference.js':referenceURL,'./sensors.js':new URL('js/sensors.js',base).href,'./fall_guard.js':new URL('js/fall_guard.js',base).href}))source=source.replace(`from '${path}'`,`from '${url}'`);
 await import(moduleURL(source));
 const drain=async()=>{for(let i=0;i<5;i++)await new Promise(resolve=>setImmediate(resolve));};
 // Reset before loading cannot arm an unavailable policy.
@@ -72,3 +73,23 @@ globalThis.testInference=()=>{inferences++;return new Float32Array(23);};
 element('btn-play').onclick();frame(320);await drain();
 assert.equal(inferences,5);assert.equal(physicsSteps,3,'Re-armed controller reaches physics again');
 console.log('PASS: fall/substep cutoff, damping, reset and seek re-arm, stale inference rejection ignored, new errors latch, Reset/R enables the policy but leaves playback paused; Play resumes inference.');
+
+// Scripted loads must ramp, apply at palms with torque, release, and clear on reset/fall.
+globalThis.testFall=false;
+element('btn-restart').onclick();element('btn-play').onclick();frame(360);await drain();
+element('push-down').onclick();const start=globalThis.testViewer.data.time;
+globalThis.testViewer.data.time=start+2;frame(400);await drain();
+assert.equal(globalThis.testViewer.data.xfrc_applied[8],-30);
+assert.equal(globalThis.testViewer.data.xfrc_applied[9],-30,'left palm lever-arm moment');
+assert.equal(globalThis.testViewer.data.xfrc_applied[14],-30);
+assert.equal(globalThis.testViewer.data.xfrc_applied[15],30,'right palm lever-arm moment');
+globalThis.testViewer.data.time=start+4.1;frame(440);await drain();
+assert.ok(globalThis.testViewer.data.xfrc_applied.every(v=>v===0));
+assert.match(element('load-status').textContent,/released/);
+element('push-left').onclick();element('btn-restart').onclick();
+assert.equal(element('load-status').textContent,'No scripted load');
+element('btn-play').onclick();frame(480);await drain();
+assert.ok(globalThis.testViewer.data.xfrc_applied.every(v=>v===0));
+element('push-right').onclick();globalThis.testFall=true;frame(520);await drain();
+assert.equal(element('btn-policy').disabled,true);assert.match(element('load-status').textContent,/cleared/);
+console.log('PASS: scripted palm force/moment, automatic release, reset cancellation, fall cancellation');

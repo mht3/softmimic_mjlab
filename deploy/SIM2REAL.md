@@ -92,9 +92,17 @@ The resumed run reached iteration 19999/20000. Five late checkpoints and the 15k
 All eleven saved checkpoints have now been evaluated, including 15.5k–17.5k, alongside the W&B curves and five fresh noise seeds for the four leading candidates. That review selected 15k; the subsequent 11k–24k review selected 24k. See [full comparison and training curves](../doc/CHECKPOINT_SELECTION.md); the small differences among 15k/16.5k/17k are not a calibrated hardware ranking.
 
 
-## Current default: 24k
+## Previous default: 24k
 
-Checkpoint 24,000 is installed in both the browser and native deployment bundle. Across 28 candidates it had the lowest noisy wrist-speed RMS among candidates passing the recovery gates. It passed 30/30 standing/recovery trials and survived six separate delay stress trials; eight-seed wrist RMS was 0.385 rad/s (15k: 0.443). The ONNX, YAML, CSV and interface checks are matched. See [noise investigation and selection](../doc/WRIST_NOISE_REVIEW.md) and the bundle’s `checkpoint_selection_11_24k.json`. Existing fall latch, fresh-sensor checks, FixStand pose and portable controller paths are preserved. No hardware validation is claimed.
+Checkpoint 24,000 was previously installed in both the browser and native deployment bundle. Across 28 candidates it had the lowest noisy wrist-speed RMS among candidates passing the recovery gates. It passed 30/30 standing/recovery trials and survived six separate delay stress trials; eight-seed wrist RMS was 0.385 rad/s (15k: 0.443). The ONNX, YAML, CSV and interface checks are matched. See [noise investigation and selection](../doc/WRIST_NOISE_REVIEW.md) and the bundle’s `checkpoint_selection_11_24k.json`. Existing fall latch, fresh-sensor checks, FixStand pose and portable controller paths are preserved. No hardware validation is claimed.
 
 
 The final 25k checkpoint (`model_24999.pt`) was evaluated after completion. It passed 26/30 standing/recovery trials versus 24k’s 30/30, and had eight-seed wrist RMS 0.444 versus 0.385 rad/s. Four downward-load trials missed palm-position recovery tolerance without falling. Both survived six delay stress tests. The default remains 24k; see the bundle’s `final_25k_comparison.json`.
+
+## Seeded simulation robustness lab
+
+The browser now exposes training-range physical draws, per-channel sensor noise and bounded palm loads. Delay remains a separate stress test. The [40k review and verification workflow](../doc/ROBUSTNESS_TESTING.md) distinguish nominal-physics sensitivity from smoother randomized dynamics. The selected 34k bundle now replaces the previous default; native sensor processing is unchanged.
+
+## Current default: fresh-run checkpoint 34,000
+
+The included ONNX/YAML/CSV and standing controller config now select checkpoint 34,000 from the ongoing fresh 50k run. It passed 16/16 basic standing/recovery trials, 6/6 seeded training-dynamics standing/downward-load trials, and both 20/40 ms delay stress trials. Mean noisy standing wrist RMS was 0.313 rad/s (39k: 0.335; 40k: 0.405). These are finite simulated trials, not hardware acceptance. The matched bundle includes `selection_34000.json` and file hashes; earlier comparison reports are historical. See [robustness protocol](../doc/ROBUSTNESS_TESTING.md) and [Ethernet preflight](README.md).

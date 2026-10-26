@@ -36,7 +36,7 @@ def load_envelope(t):
     return .5 + .5*np.cos(np.pi*(t-8))
 
 
-def run(bundle, seconds, mode, sensor_noise=False, delay_steps=0, seed=42, contact_profile='training', body_friction=.5, load='none', noise_scales=None):
+def run(bundle, seconds, mode, sensor_noise=False, delay_steps=0, seed=42, contact_profile='training', body_friction=.5, load='none', noise_scales=None, randomization=None):
     # Diagnostics only: consume every noise draw even for disabled channels so
     # paired ablations retain identical noise in the remaining sensor channels.
     noise_bounds = {'base_ang_vel': .2, 'projected_gravity': .01,
@@ -64,6 +64,17 @@ def run(bundle, seconds, mode, sensor_noise=False, delay_steps=0, seed=42, conta
             ET.SubElement(actuators,'motor',name=name,joint=name,ctrllimited='true',ctrlrange=f'{-effort[i]} {effort[i]}')
     contacts=configure_contacts(root,contact_profile,body_friction)
     model=mujoco.MjModel.from_xml_string(ET.tostring(root,encoding='unicode'));data=mujoco.MjData(model)
+    randomized_values=None
+    if randomization is not None:
+        if mode != 'implicit': raise ValueError('Randomization requires implicit PD')
+        from domain_randomization import apply_draw
+        randomized_values=apply_draw(model,**randomization)
+        if randomization.get('training_contacts',True):
+            contacts.update(profile='training',body_sliding_friction=0.)
+        if randomized_values['foot_friction'] is not None:
+            contacts['foot_sliding_friction']=randomized_values['foot_friction']
+        mujoco.mj_setConst(model,data)
+        mujoco.mj_resetData(model,data)
     data.qpos[:3]=q0[:3];data.qpos[3:7]=q0[[6,3,4,5]];data.qpos[7:]=q0[7:30]
     mujoco.mj_forward(model,data)
     session=ReferenceEvaluator(str(bundle/'exported/policy.onnx'))
@@ -122,7 +133,7 @@ def run(bundle, seconds, mode, sensor_noise=False, delay_steps=0, seed=42, conta
         recovery=dict(root_height_error_m=float(abs(after[2]-before[2])),root_xy_drift_m=float(np.linalg.norm(after[:2]-before[:2])),
                       maximum_palm_error_m=float(max(np.linalg.norm(after[3:6]-before[3:6]),np.linalg.norm(after[6:9]-before[6:9]))),
                       mean_final_tilt_rad=float(np.mean(tilts[-1000:])))
-    return dict(contacts=contacts,mode=mode,sensor_noise=sensor_noise,noise_scales=noise_scales,extra_sensor_delay_ms=delay_steps*20,seed=seed,seconds=float(data.time),
+    return dict(randomization=randomization,randomized_values=randomized_values,contacts=contacts,mode=mode,sensor_noise=sensor_noise,noise_scales=noise_scales,extra_sensor_delay_ms=delay_steps*20,seed=seed,seconds=float(data.time),
                 load=load,load_forces_world_N=LOADS[load],load_window_s=[5,9],peak_per_hand_force_N=peak_force,peak_lever_arm_torque_Nm=peak_torque,
                 fallen=fallen,recovery=recovery,maximum_tilt_rad=max(tilts),minimum_root_height_m=min(heights),wrist_speed_rms_rad_s=float(np.sqrt(np.mean(np.array(speeds)**2))),wrist_action_rate_rms=float(np.sqrt(np.mean(np.array(deltas)**2))),max_raw_action=max(peaks))
 

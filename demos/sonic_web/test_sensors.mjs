@@ -7,6 +7,9 @@ const s=new SensorModel(),clean=s.sample(q,v,{noise:false});
 q[0]=100;q[2]=-100;v[0]=50;
 assert.deepEqual(s.sample(q,v,{noise:false}),clean,'Global pose/linear velocity must not enter measured actor channels');
 s.reset();let first=s.sample(q,v);s.reset();assert.deepEqual(s.sample(q,v),first);
+s.reset(43);assert.notDeepEqual(s.sample(q,v),first,'Seed changes sensor draws');
+s.reset(42);const ablated=s.sample(q,v,{channels:{joint_vel:false}});
+assert.deepEqual(ablated.joint_vel,clean.joint_vel);assert.deepEqual(ablated.joint_pos,first.joint_pos);
 for(const [key,bound] of Object.entries({base_ang_vel:.2,projected_gravity:.01,joint_pos:.01,joint_vel:1.5}))
  first[key].forEach((x,i)=>assert.ok(Math.abs(x-clean[key][i])<=bound));
 s.reset();s.sample(q,v,{noise:false,delaySteps:1});q[7]=.5;

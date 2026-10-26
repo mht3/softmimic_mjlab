@@ -5,9 +5,29 @@
 <div class="control"><span>Physics</span><button id="btn-physics">OFF</button></div><div class="control"><span>Trained ONNX policy</span><button id="btn-policy" disabled>Awaiting matched policy</button></div><div class="control"><span>Camera follow</span><button id="btn-follow">ON</button></div>
 <p id="contact-help"></p>
 <p id="fall-help">Fall detection: pelvis IMU tilt cutoff; damping only after a fall.</p>
+<details open class="randomization"><summary>Robustness lab</summary>
+<div class="preset-buttons"><button id="dr-nominal">Nominal</button><button id="dr-sensors">Sensors only</button><button id="dr-training">Training draw</button></div>
+<label>Reproducible seed <input id="dr-seed" type="number" value="42" min="0" max="4294967295" step="1"></label>
+<div class="preset-buttons"><button id="dr-apply">Apply / reset</button><button id="dr-next">Next seed</button></div>
+<p>Changes reset and pause the robot. Press Play. Reset repeats the same draw.</p>
 <label class="check"><input id="sensor-noise" type="checkbox" checked> Training-range sensor noise</label>
-<label>Observation delay (stress test)<select id="sensor-delay"><option value="0">0 ms extra</option><option value="1">20 ms extra</option><option value="2">40 ms extra</option></select></label>
-<p>Pelvis IMU + encoders at 50 Hz. Noise/delay are test settings, not calibrated hardware measurements.</p>
+<details><summary>Sensor channels (uniform, 50 Hz)</summary>
+<label class="check"><input id="noise-base_ang_vel" type="checkbox" checked> Gyro ±0.2 rad/s</label>
+<label class="check"><input id="noise-projected_gravity" type="checkbox" checked> Gravity vector ±0.01</label>
+<label class="check"><input id="noise-joint_pos" type="checkbox" checked> Joint position ±0.01 rad</label>
+<label class="check"><input id="noise-joint_vel" type="checkbox" checked> Joint velocity ±1.5 rad/s</label></details>
+<label class="check"><input id="dr-mass" type="checkbox"> Torso payload ±2 kg / COM ±2 cm; pelvis + hip mass ×0.7–1.3</label>
+<label class="check"><input id="dr-actuators" type="checkbox"> Damping +0–2, armature +0.01–0.1, joint friction +0–0.01</label>
+<label class="check"><input id="dr-limits" type="checkbox"> Joint limits ±0.02 rad</label>
+<label class="check"><input id="dr-friction" type="checkbox"> Shared foot friction 0.5–2.0</label>
+<label class="check"><input id="dr-contacts" type="checkbox"> Training body contacts (frictionless)</label>
+<label>Observation delay (extra stress, not trained)<select id="sensor-delay"><option value="0">0 ms extra</option><option value="1">20 ms extra</option><option value="2">40 ms extra</option></select></label>
+<p id="dr-values"></p><p id="robustness-metrics" aria-live="off">Wrist RMS: —</p>
+<label>Repeatable palm loads (1 s ramp, 2 s hold, 1 s release)</label>
+<div class="preset-buttons"><button id="push-left">Left 20 N</button><button id="push-right">Right 20 N</button><button id="push-down">Down 30 N/hand</button></div>
+<p id="load-status">No scripted load</p>
+<p>Pelvis IMU + encoders at 50 Hz. These are training distributions and finite stress tests, not calibrated hardware measurements. Loads are bounded tests, not the training forcefield.</p>
+</details>
 <label class="check"><input id="ghost-offset" type="checkbox" checked> Reference ghost beside robot</label>
 <label>Compliance stiffness <span id="stiffness-value">200</span> N/m<input id="stiffness" type="range" min="40" max="1000" step="10" value="200"></label>
 <label>Rotational stiffness <span id="rotational-stiffness-value">1</span> Nm/rad<input id="rotational-stiffness" type="range" min="0.1" max="10" step="0.1" value="1"></label>

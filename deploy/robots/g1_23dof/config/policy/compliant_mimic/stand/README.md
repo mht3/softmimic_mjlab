@@ -1,6 +1,6 @@
 # Matched 23DOF compliant-standing controller
 
-This folder contains **Stable checkpoint 24000**, matched to the default browser preview. Selected from 28 saved checkpoints (11k–24k), it passed 30/30 basic and held-out standing/recovery tests and survived six 20/40 ms sensor-delay tests. Mean noisy wrist speed was 0.385 rad/s over eight seeds, compared with 0.443 for 15k. See `checkpoint_selection_11_24k.json`. The extended run completed at iteration 24999/25000. Its final checkpoint was also evaluated and retained as a local comparison: 26/30 recovery tests and 0.444 rad/s noisy wrist RMS, so 24000 remains selected (see `final_25k_comparison.json`). Older comparison files in this folder are historical.
+This folder contains **checkpoint 34000** from the fresh 50k run, matched to the default browser preview. It passed 16/16 basic standing/recovery tests, 6/6 seeded training-dynamics standing/downward-load tests and two sensor-delay stress tests. Noisy standing wrist RMS was 0.313 rad/s. See `selection_34000.json`. The run is still ongoing; this is an intermediate checkpoint selected by simulation, not a final or hardware-validated controller. Older comparison files in this folder are historical.
 
 - `exported/policy.onnx`: 327 actor inputs, 23 joint actions, 50 Hz.
 - `params/deploy.yaml`: exact observation history, nominal channels, gains, joint map, scaling and ±5 raw-action bound from this checkpoint.

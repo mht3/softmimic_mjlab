@@ -3,10 +3,11 @@
 #include "FSM/State_FixStand.h"
 #include "FSM/State_RLBase.h"
 #include "State_Mimic.h"
+#include <net/if.h>
 
 std::unique_ptr<LowCmd_t> FSMState::lowcmd = nullptr;
 std::shared_ptr<LowState_t> FSMState::lowstate = nullptr;
-std::shared_ptr<Keyboard> FSMState::keyboard = std::make_shared<Keyboard>();
+std::shared_ptr<Keyboard> FSMState::keyboard = nullptr;
 
 void init_fsm_state()
 {
@@ -33,6 +34,17 @@ int main(int argc, char** argv)
     std::cout << " --- Unitree Robotics --- \n";
     std::cout << "     G1-23dof Controller \n";
 
+    // Fail before opening DDS when the operator has not selected an adapter.
+    const auto network = vm["network"].as<std::string>();
+    if (network.empty() || network == "lo" || if_nametoindex(network.c_str()) == 0) {
+        spdlog::critical("Specify an existing robot Ethernet adapter with --network=INTERFACE (not loopback).");
+        return 2;
+    }
+    if (!param::config["FSM"]) {
+        spdlog::critical("Missing controller config: {}", (param::config_dir / "config.yaml").string());
+        return 2;
+    }
+
     // Unitree DDS Config
     unitree::robot::ChannelFactory::Instance()->Init(0, vm["network"].as<std::string>());
 
@@ -44,6 +56,9 @@ int main(int argc, char** argv)
         exit(-1);
     }
     
+    // Console input starts only after CLI validation and robot-mode checks.
+    FSMState::keyboard = std::make_shared<Keyboard>();
+
     // Initialize FSM
     auto fsm = std::make_unique<CtrlFSM>(param::config["FSM"]);
     fsm->start();

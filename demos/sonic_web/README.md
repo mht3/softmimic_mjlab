@@ -38,7 +38,7 @@ The actor has 327 inputs and 23 actions at 50 Hz. Per-term histories contain thr
 
 MuJoCo runs at 5 ms with four substeps per control update. Joint order, limits, armatures and collision masks follow the training robot. Robot-ground collisions are enabled; robot self contacts are disabled as in the training configuration. The default `--contact-profile frictional-body` adds sliding friction to body-ground contacts (assumed coefficient 0.5); feet retain the training coefficient 0.6. This prevents frictionless sliding after falls. `--body-friction` adjusts the assumption; `--contact-profile training` reproduces the original frictionless non-foot contacts. These coefficients are not hardware calibrated. The offline IK collision audit is a separate gate. Each physics substep recomputes drag force and its moment at the grabbed body anchor; release/reset clears it. Physics with policy OFF falls under gravity.
 
-The browser uses implicit PD actuators with the exported gains and force limits. MuJoCo-WASM precision, contact solving and the absence of training domain randomization can still differ from mjlab. Interface parity does not establish balance, compliant behavior or hardware readiness. Background browser throttling can also reduce playback speed.
+The browser uses implicit PD actuators with the exported gains and force limits. MuJoCo-WASM precision, contact solving and randomization scheduling can still differ from mjlab. Interface parity does not establish balance, compliant behavior or hardware readiness. Background browser throttling can also reduce playback speed.
 
 ```bash
 node demos/sonic_web/test_drag.mjs
@@ -57,3 +57,9 @@ python demos/sonic_web/test_policy_contract.py --deploy "$BUNDLE/params/deploy.y
 ### Fall cutoff
 
 At the matched hardware tilt limit (default 1.25 rad / 71.6°), policy control latches OFF and simulation continues with damping only. Press **Reset** (or **R**) to restore the pose and turn the matched policy and physics ON; playback stays paused until **Play**. Seeking to a reference pose after a fall also clears the latch, leaving the actor OFF and available to enable. Late inference results/errors from before reset are discarded. Returning upright does not restart inference. The detector uses pelvis orientation, not world height, so deliberate squats remain allowed. See [checkpoint comparison and sensor limitations](../../deploy/SIM2REAL.md).
+
+### Robustness lab
+
+Use **Nominal**, **Sensors only**, or **Training draw** to compare the same policy under clean inputs, training sensor noise, and sampled physical parameters. Apply/reset pauses and enables the policy; press Play. Reset repeats the seed; Next seed changes it. Sensor channels and physical groups can be disabled separately. The wrist-speed readout reports physical joint motion. Palm-load buttons provide repeatable load/release tests; extra sensor delay is a separate stress test.
+
+Training draw includes mass/COM, damping, armature, joint friction/limits, shared foot friction and training body contacts. These reproduce training ranges, not measured hardware noise or a complete training episode. See [ranges, 40k comparison and verification workflow](../../doc/ROBUSTNESS_TESTING.md).

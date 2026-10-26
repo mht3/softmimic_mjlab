@@ -118,14 +118,16 @@ The policy receives nominal-reference channels and robot proprioception. Externa
 
 ## 5. Prepare real-robot deployment
 
-The bundle already puts the files in the controller's expected layout:
+A fresh clone already includes the selected 34k policy at `deploy/robots/g1_23dof/config/policy/compliant_mimic/stand`, with a portable matching default config. Run `python deploy/check_bundle.py` and follow [Ethernet preflight](deploy/README.md). No IK dataset or NPZ is required for this included constant-standing policy.
+
+For a separately packaged new policy, the exporter puts files in this layout:
 
 ```text
 config/policy/streamer_stand/
   exported/policy.onnx
   params/deploy.yaml
   params/reference.csv       # full nominal reference for the browser/provenance
-  params/stand.npz           # constant nominal reference for the C++ controller
+  params/stand.npz           # optional generated artifact; constant-standing runtime uses YAML
   controller_config.yaml    # standing-only FSM with matched paths
   manifest.json
 ```
